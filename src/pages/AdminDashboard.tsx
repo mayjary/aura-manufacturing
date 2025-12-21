@@ -59,7 +59,7 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Background gradient */}
-      <div className="fixed inset-0 bg-gradient-to-br from-background via-background to-primary/5 pointer-events-none" />
+      <div className="fixed inset-0 bg-gradient-to-br from-background via-secondary/40 to-primary/5 pointer-events-none" />
 
       {/* Floating Navigation */}
       <FloatingNav
@@ -83,9 +83,9 @@ const AdminDashboard: React.FC = () => {
       <main className="relative pt-24 pb-12 px-4 md:px-8 max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 animate-fade-in-up">
-          <h1 className="text-3xl font-bold text-foreground">
-            Welcome back, Manager
-          </h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+          Welcome back, <span className="text-gradient">Manager</span>
+        </h1>
           <p className="text-muted-foreground mt-1">
             Here's what's happening in your factory today
           </p>
@@ -143,7 +143,7 @@ const AdminDashboard: React.FC = () => {
               {productionOrders.map((order) => (
                 <div
                   key={order.id}
-                  className="flex items-center gap-4 p-4 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                  className="flex items-center gap-4 p-4 rounded-xl bg-secondary/20 hover:bg-secondary/35 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">

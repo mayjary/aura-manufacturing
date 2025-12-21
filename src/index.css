@@ -11,7 +11,7 @@
     
     /* Light theme - Apple-like high contrast palette */
     /* Background: #FFFFFF -> 0 0% 100% */
-    --background: 0 0% 100%;
+    --background: 240 5% 96%; /* #F5F5F7 */
     /* Primary Text: #1D1D1F -> 240 3% 12% */
     --foreground: 240 3% 12%;
 
@@ -58,7 +58,7 @@
     /* Glass effect tokens - Light */
     --glass-bg: 0 0% 100% / 0.7;
     --glass-border: 0 0% 0% / 0.08;
-    --glass-shadow: 0 0% 0% / 0.08;
+    --glass-shadow: 0 0% 0% / 0.12;
     
     /* Sidebar (unused but kept for compatibility) */
     --sidebar-background: 0 0% 98%;
@@ -159,11 +159,11 @@
 
   /* Floating navigation */
   .glass-nav {
-    @apply backdrop-blur-2xl border rounded-full px-6 py-3;
-    background: hsl(var(--glass-bg));
+    @apply backdrop-blur-[28px] border rounded-full px-6 py-3;
+    background: hsl(var(--glass-bg) / 0.55);
     border-color: hsl(var(--glass-border));
-    box-shadow: 0 4px 24px hsl(var(--glass-shadow));
-  }
+    box-shadow: 0 8px 30px hsl(var(--glass-shadow) / 0.4);
+  }  
 
   /* Bottom navigation for mobile */
   .glass-bottom-nav {
