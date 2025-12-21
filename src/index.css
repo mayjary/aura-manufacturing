@@ -9,27 +9,34 @@
     /* System font stack mimicking SF Pro */
     --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
     
-    /* Light theme - Clean whites with subtle depth */
-    --background: 220 20% 98%;
-    --foreground: 220 20% 10%;
+    /* Light theme - Apple-like high contrast palette */
+    /* Background: #FFFFFF -> 0 0% 100% */
+    --background: 0 0% 100%;
+    /* Primary Text: #1D1D1F -> 240 3% 12% */
+    --foreground: 240 3% 12%;
 
+    /* Surface: rgba(255,255,255,0.7) for glass */
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 10%;
+    --card-foreground: 240 3% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 10%;
+    --popover-foreground: 240 3% 12%;
 
-    /* Teal/Cyan primary - sophisticated and modern */
-    --primary: 187 85% 43%;
+    /* Accent Blue: #007AFF -> 211 100% 50% */
+    --primary: 211 100% 50%;
     --primary-foreground: 0 0% 100%;
+    /* Accent Blue Hover: #005FCC -> 211 100% 40% */
+    --primary-hover: 211 100% 40%;
 
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 20% 20%;
+    /* Muted Gray: #F5F5F7 -> 240 5% 96% */
+    --secondary: 240 5% 96%;
+    /* Secondary Text: #6E6E73 -> 240 2% 44% */
+    --secondary-foreground: 240 2% 44%;
 
-    --muted: 220 14% 95%;
-    --muted-foreground: 220 10% 45%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 2% 44%;
 
-    --accent: 187 70% 45%;
+    --accent: 211 100% 50%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
@@ -41,50 +48,59 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 187 85% 43%;
+    /* Border: rgba(0,0,0,0.08) */
+    --border: 0 0% 0% / 0.08;
+    --input: 0 0% 0% / 0.08;
+    --ring: 211 100% 50%;
 
     --radius: 1rem;
 
-    /* Glass effect tokens */
+    /* Glass effect tokens - Light */
     --glass-bg: 0 0% 100% / 0.7;
-    --glass-border: 0 0% 100% / 0.2;
-    --glass-shadow: 220 20% 10% / 0.1;
+    --glass-border: 0 0% 0% / 0.08;
+    --glass-shadow: 0 0% 0% / 0.08;
     
     /* Sidebar (unused but kept for compatibility) */
     --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 187 85% 43%;
+    --sidebar-foreground: 240 3% 12%;
+    --sidebar-primary: 211 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 5% 96%;
+    --sidebar-accent-foreground: 240 3% 12%;
+    --sidebar-border: 0 0% 0% / 0.08;
+    --sidebar-ring: 211 100% 50%;
   }
 
   .dark {
-    /* Dark theme - Deep slates with vibrant accents */
-    --background: 222 47% 6%;
-    --foreground: 210 40% 98%;
+    /* Dark theme - Apple-style deep neutral dark palette */
+    /* Background: #000000 -> 0 0% 0% */
+    --background: 0 0% 0%;
+    /* Primary Text: #F5F5F7 -> 240 5% 96% */
+    --foreground: 240 5% 96%;
 
-    --card: 222 47% 8%;
-    --card-foreground: 210 40% 98%;
+    /* Surface: rgba(28,28,30,0.75) -> 240 4% 11% */
+    --card: 240 4% 11%;
+    --card-foreground: 240 5% 96%;
 
-    --popover: 222 47% 8%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 240 4% 11%;
+    --popover-foreground: 240 5% 96%;
 
-    --primary: 187 85% 53%;
-    --primary-foreground: 222 47% 6%;
+    /* Accent Blue (dark): #0A84FF -> 211 100% 52% */
+    --primary: 211 100% 52%;
+    --primary-foreground: 0 0% 100%;
+    /* Accent Blue Hover (dark): #409CFF -> 211 100% 63% */
+    --primary-hover: 211 100% 63%;
 
-    --secondary: 217 33% 15%;
-    --secondary-foreground: 210 40% 98%;
+    /* Muted Gray: #1C1C1E -> 240 4% 11% */
+    --secondary: 240 4% 11%;
+    /* Secondary Text: #A1A1A6 -> 240 2% 64% */
+    --secondary-foreground: 240 2% 64%;
 
-    --muted: 217 33% 15%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 240 4% 11%;
+    --muted-foreground: 240 2% 64%;
 
-    --accent: 187 70% 55%;
-    --accent-foreground: 222 47% 6%;
+    --accent: 211 100% 52%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
@@ -95,23 +111,24 @@
     --warning: 38 92% 55%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 187 85% 53%;
+    /* Border: rgba(255,255,255,0.08) */
+    --border: 0 0% 100% / 0.08;
+    --input: 0 0% 100% / 0.08;
+    --ring: 211 100% 52%;
 
     /* Dark glass effect tokens */
-    --glass-bg: 222 47% 10% / 0.7;
-    --glass-border: 0 0% 100% / 0.1;
+    --glass-bg: 240 4% 11% / 0.75;
+    --glass-border: 0 0% 100% / 0.08;
     --glass-shadow: 0 0% 0% / 0.3;
 
-    --sidebar-background: 222 47% 8%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 187 85% 53%;
+    --sidebar-background: 240 4% 11%;
+    --sidebar-foreground: 240 5% 96%;
+    --sidebar-primary: 211 100% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 33% 15%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 217 33% 20%;
-    --sidebar-ring: 187 85% 53%;
+    --sidebar-accent: 240 4% 15%;
+    --sidebar-accent-foreground: 240 5% 96%;
+    --sidebar-border: 0 0% 100% / 0.08;
+    --sidebar-ring: 211 100% 52%;
   }
 }
 
@@ -148,6 +165,13 @@
     box-shadow: 0 4px 24px hsl(var(--glass-shadow));
   }
 
+  /* Bottom navigation for mobile */
+  .glass-bottom-nav {
+    @apply backdrop-blur-2xl border-t px-4 py-2;
+    background: hsl(var(--glass-bg));
+    border-color: hsl(var(--glass-border));
+  }
+
   /* Glass button */
   .glass-button {
     @apply backdrop-blur-md border rounded-xl px-4 py-2 transition-all duration-300;
@@ -156,13 +180,13 @@
   }
 
   .glass-button:hover {
-    background: hsl(0 0% 100% / 0.9);
+    background: hsl(0 0% 100% / 0.85);
     transform: translateY(-1px);
     box-shadow: 0 4px 16px hsl(var(--glass-shadow));
   }
 
   .dark .glass-button:hover {
-    background: hsl(222 47% 15% / 0.9);
+    background: hsl(240 4% 15% / 0.9);
   }
 }
 
@@ -200,6 +224,11 @@
   .stagger-3 { animation-delay: 0.3s; }
   .stagger-4 { animation-delay: 0.4s; }
   .stagger-5 { animation-delay: 0.5s; }
+
+  /* Safe area padding for mobile bottom nav */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
 
 @keyframes fadeIn {
