@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { FloatingNav } from "@/components/ui/floating-nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { StatCard } from "@/components/ui/stat-card";
@@ -20,6 +20,9 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { apiFetch, AuthError } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
+import AuthErrorDialog from "@/components/AuthErrorDialog";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -29,15 +32,6 @@ const navItems = [
   { label: "Reports", href: "/admin/reports", icon: FileText },
 ];
 
-const qcLogs = [
-  { order: "PRD-001", defects: 2, score: 96, status: "passed", date: "Dec 22, 2024" },
-  { order: "PRD-002", defects: 0, score: 100, status: "passed", date: "Dec 21, 2024" },
-  { order: "PRD-003", defects: 8, score: 72, status: "failed", date: "Dec 21, 2024" },
-  { order: "PRD-004", defects: 1, score: 98, status: "passed", date: "Dec 20, 2024" },
-  { order: "PRD-005", defects: 5, score: 85, status: "rework", date: "Dec 20, 2024" },
-  { order: "PRD-006", defects: 0, score: 100, status: "passed", date: "Dec 19, 2024" },
-];
-
 const defectTrend = [
   { week: "Week 48", rate: 2.1 },
   { week: "Week 49", rate: 1.8 },
@@ -45,12 +39,111 @@ const defectTrend = [
   { week: "Week 51", rate: 1.9 },
 ];
 
+interface QCLog {
+  id: string;
+  production_order_id: string;
+  defect_count: number;
+  qc_status?: string;
+  created_at: string;
+  notes?: string;
+}
+
 const AdminQuality: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, userRole } = useAuth();
+  const [showAuthError, setShowAuthError] = useState(false);
+  const [authError, setAuthError] = useState<string>("");
+  const [qcLogs, setQcLogs] = useState<QCLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    averageScore: 0,
+    defectRate: 0,
+    reworkCount: 0,
+  });
+
+  // Check authentication on mount
+  useEffect(() => {
+    if (isAuthenticated === false) {
+      setAuthError("You need to be logged in to access quality control.");
+      setShowAuthError(true);
+      return;
+    }
+    if (isAuthenticated === true && userRole !== "admin") {
+      setAuthError("You don't have permission to access quality control.");
+      setShowAuthError(true);
+      return;
+    }
+  }, [isAuthenticated, userRole]);
+
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "admin") return;
+
+    const fetchQCLogs = async () => {
+      try {
+        const logs = await apiFetch("/qc/logs");
+        setQcLogs(logs || []);
+
+        // Calculate stats
+        if (logs && logs.length > 0) {
+          const totalDefects = logs.reduce((sum: number, log: QCLog) => sum + (log.defect_count || 0), 0);
+          const avgDefects = totalDefects / logs.length;
+          const reworkCount = logs.filter((log: QCLog) => log.qc_status === "warning" || log.qc_status === "fail").length;
+          
+          // Calculate score (assuming max 100, deducting points for defects)
+          const avgScore = Math.max(0, 100 - (avgDefects * 2));
+          
+          setStats({
+            averageScore: Math.round(avgScore * 10) / 10,
+            defectRate: Math.round((avgDefects / 10) * 100 * 10) / 10, // Assuming 10 units per order
+            reworkCount,
+          });
+        }
+      } catch (err) {
+        if (err instanceof AuthError) {
+          setAuthError(err.message);
+          setShowAuthError(true);
+        } else {
+          console.error("Failed to fetch QC logs", err);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQCLogs();
+  }, [isAuthenticated, userRole]);
 
   const handleLogout = () => {
     sessionStorage.clear();
     navigate("/");
+  };
+
+  const getStatusFromLog = (log: QCLog): string => {
+    if (log.qc_status) {
+      if (log.qc_status === "pass") return "passed";
+      if (log.qc_status === "fail") return "failed";
+      if (log.qc_status === "warning") return "rework";
+      return log.qc_status;
+    }
+    // Fallback: determine from defect count
+    if (log.defect_count === 0) return "passed";
+    if (log.defect_count > 5) return "failed";
+    if (log.defect_count >= 3) return "rework";
+    return "passed";
+  };
+
+  const calculateScore = (log: QCLog): number => {
+    // Simple scoring: 100 - (defects * 2)
+    return Math.max(0, Math.min(100, 100 - (log.defect_count || 0) * 2));
+  };
+
+  const formatDate = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    } catch {
+      return dateString;
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -75,12 +168,35 @@ const AdminQuality: React.FC = () => {
       case "rework":
         return <span className="px-2 py-0.5 text-xs rounded-full bg-warning/20 text-warning capitalize">{status}</span>;
       default:
-        return null;
+        return <span className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground capitalize">{status}</span>;
     }
   };
 
+  // Don't render content if not authenticated
+  if (!isAuthenticated || userRole !== "admin") {
+    return (
+      <>
+        <AuthErrorDialog
+          open={showAuthError}
+          onOpenChange={setShowAuthError}
+          message={authError}
+        />
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <GlassCard className="p-8 text-center">
+            <p className="text-muted-foreground">Checking authentication...</p>
+          </GlassCard>
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
+      <AuthErrorDialog
+        open={showAuthError}
+        onOpenChange={setShowAuthError}
+        message={authError}
+      />
       <div className="fixed inset-0 bg-gradient-to-br from-background via-secondary/40 to-primary/5 pointer-events-none" />
 
       <FloatingNav
@@ -118,24 +234,22 @@ const AdminQuality: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <StatCard
             title="QC Score"
-            value="94.2"
-            subtitle="Average this month"
+            value={stats.averageScore.toFixed(1)}
+            subtitle="Average"
             icon={ClipboardCheck}
-            trend={{ value: 2.5, isPositive: true }}
             className="opacity-0 animate-fade-in-up stagger-1"
           />
           <StatCard
             title="Defect Rate"
-            value="2.1%"
-            subtitle="Current week"
+            value={`${stats.defectRate}%`}
+            subtitle="Average"
             icon={AlertTriangle}
-            trend={{ value: 0.3, isPositive: false }}
             className="opacity-0 animate-fade-in-up stagger-2"
           />
           <StatCard
             title="Rework Count"
-            value="4"
-            subtitle="This month"
+            value={stats.reworkCount.toString()}
+            subtitle="Total"
             icon={Repeat}
             className="opacity-0 animate-fade-in-up stagger-3"
           />
@@ -145,52 +259,64 @@ const AdminQuality: React.FC = () => {
           {/* QC Logs Table */}
           <GlassCard className="lg:col-span-2 opacity-0 animate-fade-in-up stagger-2">
             <h3 className="text-lg font-semibold mb-4">Recent QC Logs</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-sm text-muted-foreground border-b border-border/30">
-                    <th className="pb-3 font-medium">Order</th>
-                    <th className="pb-3 font-medium">Defects</th>
-                    <th className="pb-3 font-medium">Score</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 font-medium">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {qcLogs.map((log, index) => (
-                    <tr key={index} className="border-b border-border/20 last:border-0">
-                      <td className="py-4 font-medium">{log.order}</td>
-                      <td className="py-4">
-                        <span className={cn(
-                          log.defects > 5 && "text-destructive",
-                          log.defects > 0 && log.defects <= 5 && "text-warning",
-                          log.defects === 0 && "text-success"
-                        )}>
-                          {log.defects}
-                        </span>
-                      </td>
-                      <td className="py-4">
-                        <span className={cn(
-                          "font-medium",
-                          log.score >= 90 && "text-success",
-                          log.score >= 80 && log.score < 90 && "text-warning",
-                          log.score < 80 && "text-destructive"
-                        )}>
-                          {log.score}/100
-                        </span>
-                      </td>
-                      <td className="py-4">
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(log.status)}
-                          {getStatusBadge(log.status)}
-                        </div>
-                      </td>
-                      <td className="py-4 text-muted-foreground text-sm">{log.date}</td>
+            {loading ? (
+              <p className="text-muted-foreground">Loading QC logs...</p>
+            ) : qcLogs.length === 0 ? (
+              <p className="text-muted-foreground">No QC logs found.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-sm text-muted-foreground border-b border-border/30">
+                      <th className="pb-3 font-medium">Order</th>
+                      <th className="pb-3 font-medium">Defects</th>
+                      <th className="pb-3 font-medium">Score</th>
+                      <th className="pb-3 font-medium">Status</th>
+                      <th className="pb-3 font-medium">Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {qcLogs.map((log) => {
+                      const status = getStatusFromLog(log);
+                      const score = calculateScore(log);
+                      return (
+                        <tr key={log.id} className="border-b border-border/20 last:border-0">
+                          <td className="py-4 font-medium">{log.production_order_id || "N/A"}</td>
+                          <td className="py-4">
+                            <span className={cn(
+                              log.defect_count > 5 && "text-destructive",
+                              log.defect_count > 0 && log.defect_count <= 5 && "text-warning",
+                              log.defect_count === 0 && "text-success"
+                            )}>
+                              {log.defect_count || 0}
+                            </span>
+                          </td>
+                          <td className="py-4">
+                            <span className={cn(
+                              "font-medium",
+                              score >= 90 && "text-success",
+                              score >= 80 && score < 90 && "text-warning",
+                              score < 80 && "text-destructive"
+                            )}>
+                              {score}/100
+                            </span>
+                          </td>
+                          <td className="py-4">
+                            <div className="flex items-center gap-2">
+                              {getStatusIcon(status)}
+                              {getStatusBadge(status)}
+                            </div>
+                          </td>
+                          <td className="py-4 text-muted-foreground text-sm">
+                            {formatDate(log.created_at)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </GlassCard>
 
           {/* Defect Trend */}

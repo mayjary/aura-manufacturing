@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FloatingNav } from "@/components/ui/floating-nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -17,9 +17,12 @@ import {
   TrendingUp,
   Package,
   BarChart3,
+  Loader2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
+import { apiFetch, AuthError } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -29,57 +32,249 @@ const navItems = [
   { label: "Reports", href: "/admin/reports", icon: FileText },
 ];
 
-const reportCards = [
+interface SummaryStats {
+  totalOrders: number;
+  efficiency: number;
+  materialCost: number;
+  avgQcScore: number;
+}
+
+interface ReportCardData {
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  stats: Array<{ label: string; value: string }>;
+}
+
+const reportCardTemplates: Array<{
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
   {
     id: "production",
     title: "Production Summary",
     description: "Overview of production orders, completion rates, and worker efficiency",
     icon: Factory,
-    stats: [
-      { label: "Orders Completed", value: "24" },
-      { label: "On-Time Rate", value: "92%" },
-      { label: "Avg Cycle Time", value: "3.2 days" },
-    ],
   },
   {
     id: "inventory",
     title: "Inventory Usage",
     description: "Material consumption, stock levels, and reorder analytics",
     icon: Boxes,
-    stats: [
-      { label: "Materials Used", value: "15,420" },
-      { label: "Low Stock Items", value: "3" },
-      { label: "Reorders Made", value: "8" },
-    ],
   },
   {
     id: "quality",
     title: "Quality Trends",
     description: "QC scores, defect analysis, and quality improvement metrics",
     icon: ClipboardCheck,
-    stats: [
-      { label: "Avg QC Score", value: "94.2" },
-      { label: "Defect Rate", value: "1.8%" },
-      { label: "Rework Rate", value: "2.1%" },
-    ],
   },
 ];
 
 const AdminReports: React.FC = () => {
   const navigate = useNavigate();
-  const [selectedMonth, setSelectedMonth] = useState("december-2024");
+  const { isAuthenticated, userRole } = useAuth();
+  const [selectedMonth, setSelectedMonth] = useState("2024-12");
+  const [loading, setLoading] = useState(true);
+  const [summaryStats, setSummaryStats] = useState<SummaryStats>({
+    totalOrders: 0,
+    efficiency: 0,
+    materialCost: 0,
+    avgQcScore: 0,
+  });
+  const [reportCards, setReportCards] = useState<ReportCardData[]>([]);
+
+  // Fetch report data from backend
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "admin") return;
+
+    const fetchReportData = async () => {
+      setLoading(true);
+      try {
+        // Try to fetch all report data from a single endpoint first
+        let allReportsData = null;
+        try {
+          allReportsData = await apiFetch(`/reports?month=${selectedMonth}`);
+        } catch {
+          // If single endpoint doesn't exist, fetch from individual endpoints
+        }
+
+        let summaryData, productionData, inventoryData, qualityData;
+
+        if (allReportsData) {
+          // Use data from single endpoint
+          summaryData = allReportsData.summary || allReportsData;
+          productionData = allReportsData.production || allReportsData;
+          inventoryData = allReportsData.inventory || allReportsData;
+          qualityData = allReportsData.quality || allReportsData;
+        } else {
+          // Fetch from individual endpoints
+          summaryData = await apiFetch(`/reports/summary?month=${selectedMonth}`).catch(() => null);
+          productionData = await apiFetch(`/reports/production?month=${selectedMonth}`).catch(() => null);
+          inventoryData = await apiFetch(`/reports/inventory?month=${selectedMonth}`).catch(() => null);
+          qualityData = await apiFetch(`/reports/quality?month=${selectedMonth}`).catch(() => null);
+        }
+
+        // Set summary stats
+        if (summaryData) {
+          setSummaryStats({
+            totalOrders: summaryData.total_orders || 0,
+            efficiency: summaryData.efficiency || 0,
+            materialCost: summaryData.material_cost || 0,
+            avgQcScore: summaryData.avg_qc_score || 0,
+          });
+        }
+
+        // Build report cards with real data
+        const cards: ReportCardData[] = reportCardTemplates.map((template) => {
+          const Icon = template.icon;
+          let stats: Array<{ label: string; value: string }> = [];
+
+          if (template.id === "production" && productionData) {
+            stats = [
+              { label: "Orders Completed", value: String(productionData.orders_completed || 0) },
+              { label: "On-Time Rate", value: `${productionData.on_time_rate || 0}%` },
+              { label: "Avg Cycle Time", value: `${productionData.avg_cycle_time || 0} days` },
+            ];
+          } else if (template.id === "inventory" && inventoryData) {
+            stats = [
+              { label: "Materials Used", value: String(inventoryData.materials_used || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ",") },
+              { label: "Low Stock Items", value: String(inventoryData.low_stock_items || 0) },
+              { label: "Reorders Made", value: String(inventoryData.reorders_made || 0) },
+            ];
+          } else if (template.id === "quality" && qualityData) {
+            stats = [
+              { label: "Avg QC Score", value: String(qualityData.avg_qc_score || 0) },
+              { label: "Defect Rate", value: `${qualityData.defect_rate || 0}%` },
+              { label: "Rework Rate", value: `${qualityData.rework_rate || 0}%` },
+            ];
+          } else {
+            // Fallback to default values if data not available
+            if (template.id === "production") {
+              stats = [
+                { label: "Orders Completed", value: "0" },
+                { label: "On-Time Rate", value: "0%" },
+                { label: "Avg Cycle Time", value: "0 days" },
+              ];
+            } else if (template.id === "inventory") {
+              stats = [
+                { label: "Materials Used", value: "0" },
+                { label: "Low Stock Items", value: "0" },
+                { label: "Reorders Made", value: "0" },
+              ];
+            } else if (template.id === "quality") {
+              stats = [
+                { label: "Avg QC Score", value: "0" },
+                { label: "Defect Rate", value: "0%" },
+                { label: "Rework Rate", value: "0%" },
+              ];
+            }
+          }
+
+          return {
+            ...template,
+            icon: Icon,
+            stats,
+          };
+        });
+
+        setReportCards(cards);
+      } catch (err) {
+        if (err instanceof AuthError) {
+          toast({
+            title: "Authentication error",
+            description: err.message,
+            variant: "destructive",
+          });
+        } else {
+          console.error("Failed to fetch report data", err);
+          toast({
+            title: "Failed to load reports",
+            description: "Could not fetch report data from the server",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReportData();
+  }, [selectedMonth, isAuthenticated, userRole]);
 
   const handleLogout = () => {
     sessionStorage.clear();
+    localStorage.clear();
     navigate("/");
   };
 
-  const handleExport = (format: "pdf" | "excel", reportId: string) => {
-    toast({
-      title: `Exporting ${reportId} report`,
-      description: `Generating ${format.toUpperCase()} file...`,
-    });
+  const handleExport = async (format: "pdf" | "excel", reportId: string) => {
+    try {
+      // Validate month format (YYYY-MM)
+      if (!/^\d{4}-\d{2}$/.test(selectedMonth)) {
+        toast({
+          title: "Invalid month format",
+          description: "Please select a valid month",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in to export reports",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Build the export URL - matches backend route structure
+      const API_BASE = "http://localhost:5001";
+      const exportType = format === "pdf" ? "pdf" : "excel";
+      const url = `${API_BASE}/reports/export/${exportType}?month=${selectedMonth}&type=${reportId}`;
+
+      // Fetch with authentication
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Export failed" }));
+        throw new Error(error.message || "Export failed");
+      }
+
+      // Get blob and trigger download
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `report-${reportId}-${selectedMonth}.${format === "pdf" ? "pdf" : "xlsx"}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+
+      toast({
+        title: "Export successful",
+        description: `Downloaded ${format.toUpperCase()} report`,
+      });
+    } catch (err: any) {
+      console.error("Export error:", err);
+      toast({
+        title: "Export failed",
+        description: err.message || "An error occurred",
+        variant: "destructive",
+      });
+    }
   };
+  
 
   return (
     <div className="min-h-screen bg-background">
@@ -123,10 +318,10 @@ const AdminReports: React.FC = () => {
                 <SelectValue placeholder="Select month" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="december-2024">December 2024</SelectItem>
-                <SelectItem value="november-2024">November 2024</SelectItem>
-                <SelectItem value="october-2024">October 2024</SelectItem>
-                <SelectItem value="september-2024">September 2024</SelectItem>
+                <SelectItem value="2024-12">December 2024</SelectItem>
+                <SelectItem value="2024-11">November 2024</SelectItem>
+                <SelectItem value="2024-10">October 2024</SelectItem>
+                <SelectItem value="2024-09">September 2024</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -140,7 +335,11 @@ const AdminReports: React.FC = () => {
                 <Package className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">156</p>
+                {loading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                ) : (
+                  <p className="text-2xl font-bold">{summaryStats.totalOrders}</p>
+                )}
                 <p className="text-xs text-muted-foreground">Total Orders</p>
               </div>
             </div>
@@ -151,7 +350,11 @@ const AdminReports: React.FC = () => {
                 <TrendingUp className="w-5 h-5 text-success" />
               </div>
               <div>
-                <p className="text-2xl font-bold">94%</p>
+                {loading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                ) : (
+                  <p className="text-2xl font-bold">{summaryStats.efficiency}%</p>
+                )}
                 <p className="text-xs text-muted-foreground">Efficiency</p>
               </div>
             </div>
@@ -162,7 +365,15 @@ const AdminReports: React.FC = () => {
                 <Boxes className="w-5 h-5 text-warning" />
               </div>
               <div>
-                <p className="text-2xl font-bold">$42K</p>
+                {loading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                ) : (
+                  <p className="text-2xl font-bold">
+                    ${summaryStats.materialCost >= 1000 
+                      ? `${(summaryStats.materialCost / 1000).toFixed(0)}K` 
+                      : summaryStats.materialCost.toFixed(0)}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">Material Cost</p>
               </div>
             </div>
@@ -173,7 +384,11 @@ const AdminReports: React.FC = () => {
                 <BarChart3 className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">98.5</p>
+                {loading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                ) : (
+                  <p className="text-2xl font-bold">{summaryStats.avgQcScore.toFixed(1)}</p>
+                )}
                 <p className="text-xs text-muted-foreground">Avg QC Score</p>
               </div>
             </div>
@@ -182,54 +397,71 @@ const AdminReports: React.FC = () => {
 
         {/* Report Cards */}
         <div className="grid md:grid-cols-3 gap-6">
-          {reportCards.map((report, index) => {
-            const Icon = report.icon;
-            return (
-              <GlassCard 
-                key={report.id}
-                className={`opacity-0 animate-fade-in-up stagger-${index + 2}`}
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Icon className="w-5 h-5 text-primary" />
-                  </div>
-                  <h3 className="font-semibold">{report.title}</h3>
-                </div>
-                
-                <p className="text-sm text-muted-foreground mb-6">{report.description}</p>
-                
-                <div className="space-y-3 mb-6">
-                  {report.stats.map((stat, statIndex) => (
-                    <div key={statIndex} className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{stat.label}</span>
-                      <span className="font-medium">{stat.value}</span>
-                    </div>
-                  ))}
-                </div>
-                
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="flex-1 gap-2"
-                    onClick={() => handleExport("pdf", report.id)}
-                  >
-                    <Download className="w-4 h-4" />
-                    PDF
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="flex-1 gap-2"
-                    onClick={() => handleExport("excel", report.id)}
-                  >
-                    <FileSpreadsheet className="w-4 h-4" />
-                    Excel
-                  </Button>
+          {loading && reportCards.length === 0 ? (
+            // Loading state
+            Array.from({ length: 3 }).map((_, index) => (
+              <GlassCard key={index} className="opacity-0 animate-fade-in-up">
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               </GlassCard>
-            );
-          })}
+            ))
+          ) : (
+            reportCards.map((report, index) => {
+              const Icon = report.icon;
+              return (
+                <GlassCard 
+                  key={report.id}
+                  className={`opacity-0 animate-fade-in-up stagger-${index + 2}`}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Icon className="w-5 h-5 text-primary" />
+                    </div>
+                    <h3 className="font-semibold">{report.title}</h3>
+                  </div>
+                  
+                  <p className="text-sm text-muted-foreground mb-6">{report.description}</p>
+                  
+                  <div className="space-y-3 mb-6">
+                    {report.stats.map((stat, statIndex) => (
+                      <div key={statIndex} className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">{stat.label}</span>
+                        {loading ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                        ) : (
+                          <span className="font-medium">{stat.value}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1 gap-2"
+                      onClick={() => handleExport("pdf", report.id)}
+                      disabled={loading}
+                    >
+                      <Download className="w-4 h-4" />
+                      PDF
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1 gap-2"
+                      onClick={() => handleExport("excel", report.id)}
+                      disabled={loading}
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      Excel
+                    </Button>
+                  </div>
+                </GlassCard>
+              );
+            })
+          )}
         </div>
 
         {/* Export All */}

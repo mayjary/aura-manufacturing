@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FloatingNav } from "@/components/ui/floating-nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -18,8 +19,10 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { apiFetch, AuthError } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
+import AuthErrorDialog from "@/components/AuthErrorDialog";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -29,15 +32,7 @@ const navItems = [
   { label: "Reports", href: "/admin/reports", icon: FileText },
 ];
 
-const rawMaterials = [
-  { name: "Steel Sheets", stock: 150, threshold: 200, status: "low", trend: "down" },
-  { name: "Copper Wire", stock: 280, threshold: 100, status: "ok", trend: "stable" },
-  { name: "Aluminum Plates", stock: 95, threshold: 150, status: "critical", trend: "down" },
-  { name: "Rubber Seals", stock: 520, threshold: 200, status: "ok", trend: "up" },
-  { name: "Electronic Components", stock: 340, threshold: 300, status: "ok", trend: "stable" },
-  { name: "Plastic Casings", stock: 180, threshold: 250, status: "low", trend: "down" },
-];
-
+// Mock finished products (OK for now)
 const finishedProducts = [
   { name: "Engine Assembly A-Series", stock: 45, threshold: 20, status: "ok" },
   { name: "Transmission Unit T-200", stock: 12, threshold: 15, status: "low" },
@@ -45,15 +40,69 @@ const finishedProducts = [
   { name: "Suspension Kit SK-Pro", stock: 8, threshold: 10, status: "critical" },
 ];
 
-const aiSuggestions = [
-  "Order 500 units of Steel Sheets immediately - current stock will deplete in 3 days at current usage rate.",
-  "Aluminum Plates usage has increased 25% this week. Consider adjusting reorder point to 200 units.",
-  "Supplier 'MetalWorks' offers 10% discount on bulk orders before year-end. Recommended for Copper Wire restocking.",
-];
+// Mock AI suggestions (Phase 3)
+
 
 const AdminInventory: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, userRole } = useAuth();
+  const [showAuthError, setShowAuthError] = useState(false);
+  const [authError, setAuthError] = useState<string>("");
   const [activeTab, setActiveTab] = useState("raw");
+  const [rawMaterials, setRawMaterials] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+
+  // Check authentication on mount
+  useEffect(() => {
+    if (isAuthenticated === false) {
+      setAuthError("You need to be logged in to access inventory management.");
+      setShowAuthError(true);
+      return;
+    }
+    if (isAuthenticated === true && userRole !== "admin") {
+      setAuthError("You don't have permission to access inventory management.");
+      setShowAuthError(true);
+      return;
+    }
+  }, [isAuthenticated, userRole]);
+
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "admin") return;
+
+    apiFetch("/ai/suggestions")
+      .then(setAiSuggestions)
+      .catch((err) => {
+        if (err instanceof AuthError) {
+          setAuthError(err.message);
+          setShowAuthError(true);
+        } else {
+          console.error("Failed to fetch AI suggestions", err);
+        }
+      });
+  }, [isAuthenticated, userRole]);
+
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "admin") return;
+
+    const fetchInventory = async () => {
+      try {
+        const data = await apiFetch("/inventory");
+        setRawMaterials(data);
+      } catch (err) {
+        if (err instanceof AuthError) {
+          setAuthError(err.message);
+          setShowAuthError(true);
+        } else {
+          console.error("Failed to fetch inventory", err);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+ 
+    fetchInventory();
+  }, [isAuthenticated, userRole]);
 
   const handleLogout = () => {
     sessionStorage.clear();
@@ -63,29 +112,59 @@ const AdminInventory: React.FC = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "ok":
-        return <span className="px-2 py-0.5 text-xs rounded-full bg-success/20 text-success">In Stock</span>;
+        return (
+          <span className="px-2 py-0.5 text-xs rounded-full bg-success/20 text-success">
+            In Stock
+          </span>
+        );
       case "low":
-        return <span className="px-2 py-0.5 text-xs rounded-full bg-warning/20 text-warning">Low Stock</span>;
+        return (
+          <span className="px-2 py-0.5 text-xs rounded-full bg-warning/20 text-warning">
+            Low Stock
+          </span>
+        );
       case "critical":
-        return <span className="px-2 py-0.5 text-xs rounded-full bg-destructive/20 text-destructive">Critical</span>;
+        return (
+          <span className="px-2 py-0.5 text-xs rounded-full bg-destructive/20 text-destructive">
+            Critical
+          </span>
+        );
       default:
         return null;
     }
   };
 
-  const getTrendIcon = (trend: string) => {
-    switch (trend) {
-      case "up":
-        return <TrendingUp className="w-4 h-4 text-success" />;
-      case "down":
-        return <TrendingDown className="w-4 h-4 text-destructive" />;
-      default:
-        return <div className="w-4 h-4 flex items-center justify-center text-muted-foreground">—</div>;
-    }
+  const getTrendIcon = (trend?: string) => {
+    if (trend === "up") return <TrendingUp className="w-4 h-4 text-success" />;
+    if (trend === "down") return <TrendingDown className="w-4 h-4 text-destructive" />;
+    return <span className="text-muted-foreground">—</span>;
   };
+
+  // Don't render content if not authenticated
+  if (!isAuthenticated || userRole !== "admin") {
+    return (
+      <>
+        <AuthErrorDialog
+          open={showAuthError}
+          onOpenChange={setShowAuthError}
+          message={authError}
+        />
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <GlassCard className="p-8 text-center">
+            <p className="text-muted-foreground">Checking authentication...</p>
+          </GlassCard>
+        </div>
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
+      <AuthErrorDialog
+        open={showAuthError}
+        onOpenChange={setShowAuthError}
+        message={authError}
+      />
       <div className="fixed inset-0 bg-gradient-to-br from-background via-secondary/40 to-primary/5 pointer-events-none" />
 
       <FloatingNav
@@ -114,82 +193,88 @@ const AdminInventory: React.FC = () => {
       />
 
       <main className="relative pt-24 pb-12 px-4 md:px-8 max-w-7xl mx-auto">
-        <div className="mb-8 animate-fade-in-up">
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Inventory Management</h1>
-          <p className="text-muted-foreground mt-1">Track materials and finished products</p>
+        <div className="mb-8">
+          <h1 className="text-3xl font-semibold">Inventory Management</h1>
+          <p className="text-muted-foreground">
+            Track materials and finished products
+          </p>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
+          {/* Inventory */}
           <div className="lg:col-span-2">
-            <GlassCard className="animate-fade-in-up">
+            <GlassCard>
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="mb-6">
-                  <TabsTrigger value="raw" className="gap-2">
-                    <Boxes className="w-4 h-4" />
+                  <TabsTrigger value="raw">
+                    <Boxes className="w-4 h-4 mr-2" />
                     Raw Materials
                   </TabsTrigger>
-                  <TabsTrigger value="finished" className="gap-2">
-                    <Package className="w-4 h-4" />
+                  <TabsTrigger value="finished">
+                    <Package className="w-4 h-4 mr-2" />
                     Finished Products
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="raw" className="mt-0">
-                  <div className="space-y-3">
-                    {rawMaterials.map((item, index) => (
-                      <div
-                        key={index}
-                        className={cn(
-                          "p-4 rounded-xl bg-secondary/20 hover:bg-secondary/30 transition-colors",
-                          item.status === "critical" && "border-l-4 border-destructive"
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-1">
-                              <h4 className="font-medium">{item.name}</h4>
-                              {getStatusBadge(item.status)}
+                <TabsContent value="raw">
+                  {loading && (
+                    <p className="text-muted-foreground">
+                      Loading inventory...
+                    </p>
+                  )}
+
+                  {!loading && (
+                    <div className="space-y-3">
+                      {rawMaterials.map((item) => (
+                        <div
+                          key={item.id}
+                          className={cn(
+                            "p-4 rounded-xl bg-secondary/20",
+                            item.status === "critical" &&
+                              "border-l-4 border-destructive"
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-3 mb-1">
+                                <h4 className="font-medium">{item.name}</h4>
+                                {getStatusBadge(item.status)}
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                Stock:{" "}
+                                <span className="font-medium">
+                                  {item.current_stock}
+                                </span>{" "}
+                                • Threshold: {item.reorder_threshold}
+                              </p>
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span>Stock: <span className={cn(
-                                "font-medium",
-                                item.status === "critical" && "text-destructive",
-                                item.status === "low" && "text-warning"
-                              )}>{item.stock}</span></span>
-                              <span>Threshold: {item.threshold}</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
                             {getTrendIcon(item.trend)}
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </TabsContent>
 
-                <TabsContent value="finished" className="mt-0">
+                <TabsContent value="finished">
                   <div className="space-y-3">
-                    {finishedProducts.map((item, index) => (
+                    {finishedProducts.map((item, i) => (
                       <div
-                        key={index}
+                        key={i}
                         className={cn(
-                          "p-4 rounded-xl bg-secondary/20 hover:bg-secondary/30 transition-colors",
-                          item.status === "critical" && "border-l-4 border-destructive"
+                          "p-4 rounded-xl bg-secondary/20",
+                          item.status === "critical" &&
+                            "border-l-4 border-destructive"
                         )}
                       >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-3 mb-1">
-                              <h4 className="font-medium">{item.name}</h4>
-                              {getStatusBadge(item.status)}
-                            </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span>In Stock: <span className="font-medium">{item.stock}</span></span>
-                              <span>Min Required: {item.threshold}</span>
-                            </div>
-                          </div>
+                        <div className="flex items-center gap-3 mb-1">
+                          <h4 className="font-medium">{item.name}</h4>
+                          {getStatusBadge(item.status)}
                         </div>
+                        <p className="text-sm text-muted-foreground">
+                          In Stock: {item.stock} • Min Required:{" "}
+                          {item.threshold}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -198,35 +283,31 @@ const AdminInventory: React.FC = () => {
             </GlassCard>
           </div>
 
+          {/* Insights */}
           <div className="space-y-4">
-            <GlassCard className="animate-fade-in-up stagger-1">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg bg-warning/10">
-                  <AlertTriangle className="w-5 h-5 text-warning" />
-                </div>
+            <GlassCard>
+              <div className="flex items-center gap-3 mb-3">
+                <AlertTriangle className="w-5 h-5 text-warning" />
                 <h3 className="font-semibold">Low Stock Alerts</h3>
               </div>
-              <div className="text-3xl font-bold text-warning mb-2">
-                {rawMaterials.filter(m => m.status !== "ok").length + finishedProducts.filter(p => p.status !== "ok").length}
+              <div className="text-3xl font-bold text-warning">
+                {rawMaterials.filter((m) => m.status !== "ok").length}
               </div>
-              <p className="text-sm text-muted-foreground">Items need attention</p>
+              <p className="text-sm text-muted-foreground">
+                Items need attention
+              </p>
             </GlassCard>
 
-            <GlassCard variant="prominent" className="animate-fade-in-up stagger-2">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                </div>
+            <GlassCard>
+              <div className="flex items-center gap-3 mb-3">
+                <Sparkles className="w-5 h-5 text-primary" />
                 <h3 className="font-semibold">AI Reorder Suggestions</h3>
               </div>
               <div className="space-y-3">
-                {aiSuggestions.map((suggestion, index) => (
-                  <div key={index} className="p-3 rounded-lg bg-secondary/30 text-sm">
-                    <p>{suggestion}</p>
-                    <Button variant="link" className="p-0 h-auto mt-2 text-primary text-xs">
-                      Take Action →
-                    </Button>
-                  </div>
+                {aiSuggestions.map((s, i) => (
+                  <p key={i} className="text-sm bg-secondary/30 p-3 rounded-lg">
+                    {s}
+                  </p>
                 ))}
               </div>
             </GlassCard>

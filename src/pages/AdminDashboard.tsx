@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { FloatingNav } from "@/components/ui/floating-nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { StatCard } from "@/components/ui/stat-card";
@@ -20,6 +20,9 @@ import {
   Calendar,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { apiFetch, AuthError } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
+import AuthErrorDialog from "@/components/AuthErrorDialog";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -29,35 +32,127 @@ const navItems = [
   { label: "Reports", href: "/admin/reports", icon: FileText },
 ];
 
-const productionOrders = [
-  { id: "PRD-001", product: "Engine Assembly", progress: 85, status: "On Track" },
-  { id: "PRD-002", product: "Transmission Unit", progress: 62, status: "On Track" },
-  { id: "PRD-003", product: "Brake System", progress: 45, status: "Delayed" },
-  { id: "PRD-004", product: "Suspension Kit", progress: 90, status: "On Track" },
-];
-
-const inventoryAlerts = [
-  { item: "Steel Sheets", stock: 15, threshold: 50, urgency: "high" },
-  { item: "Copper Wire", stock: 28, threshold: 40, urgency: "medium" },
-  { item: "Rubber Seals", stock: 120, threshold: 100, urgency: "low" },
-];
-
-const aiSuggestions = [
-  "Increase steel sheet order by 40% to meet Q2 demand projections",
-  "Schedule maintenance for CNC Machine #3 - efficiency dropped 12%",
-  "Consider reassigning 2 workers from Line B to Line A for PRD-003",
-];
-
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, userRole } = useAuth();
+  const [showAuthError, setShowAuthError] = useState(false);
+  const [authError, setAuthError] = useState<string>("");
+  const [productionOrders, setProductionOrders] = useState<any[]>([]);
+  const [inventoryAlerts, setInventoryAlerts] = useState<any[]>([]);
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [stats, setStats] = useState({
+    activeOrders: 0,
+    productionRate: 0,
+    qualityScore: 0,
+    inventoryAlerts: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  // Check authentication on mount
+  useEffect(() => {
+    if (isAuthenticated === false) {
+      setAuthError("You need to be logged in to access the admin dashboard.");
+      setShowAuthError(true);
+      return;
+    }
+    if (isAuthenticated === true && userRole !== "admin") {
+      setAuthError("You don't have permission to access the admin dashboard.");
+      setShowAuthError(true);
+      return;
+    }
+  }, [isAuthenticated, userRole]);
+
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "admin") return;
+
+    const fetchData = async () => {
+      try {
+        // Fetch production orders
+        const orders = await apiFetch("/production/list").catch(() => []);
+        setProductionOrders(orders || []);
+
+        // Fetch inventory
+        const inventory = await apiFetch("/inventory").catch(() => []);
+        const alerts = (inventory || [])
+          .filter((item: any) => item.status === "critical" || item.status === "low")
+          .map((item: any) => ({
+            item: item.name,
+            stock: item.current_stock,
+            threshold: item.reorder_threshold,
+            urgency: item.status === "critical" ? "high" : item.status === "low" ? "medium" : "low",
+          }));
+        setInventoryAlerts(alerts);
+
+        // Fetch AI suggestions
+        const suggestions = await apiFetch("/ai/suggestions").catch(() => []);
+        setAiSuggestions(Array.isArray(suggestions) ? suggestions : []);
+
+        // Calculate stats
+        setStats({
+          activeOrders: orders?.length || 0,
+          productionRate: 94, // TODO: Calculate from actual data
+          qualityScore: 98.5, // TODO: Calculate from QC logs
+          inventoryAlerts: alerts.length,
+        });
+      } catch (err) {
+        if (err instanceof AuthError) {
+          setAuthError(err.message);
+          setShowAuthError(true);
+        } else {
+          console.error("Failed to fetch dashboard data", err);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [isAuthenticated, userRole]);
 
   const handleLogout = () => {
     sessionStorage.clear();
     navigate("/");
   };
 
+  const getProgressFromStatus = (order: any): number => {
+    // Simple progress calculation based on status
+    if (order.status === "completed") return 100;
+    if (order.status === "in-progress") return 50;
+    if (order.status === "pending") return 10;
+    return 0;
+  };
+
+  const getStatusFromOrder = (order: any): string => {
+    if (order.status === "delayed") return "Delayed";
+    if (order.status === "completed") return "Completed";
+    return "On Track";
+  };
+
+  // Don't render content if not authenticated
+  if (!isAuthenticated || userRole !== "admin") {
+    return (
+      <>
+        <AuthErrorDialog
+          open={showAuthError}
+          onOpenChange={setShowAuthError}
+          message={authError}
+        />
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <GlassCard className="p-8 text-center">
+            <p className="text-muted-foreground">Checking authentication...</p>
+          </GlassCard>
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
+      <AuthErrorDialog
+        open={showAuthError}
+        onOpenChange={setShowAuthError}
+        message={authError}
+      />
       {/* Background gradient */}
       <div className="fixed inset-0 bg-gradient-to-br from-background via-secondary/40 to-primary/5 pointer-events-none" />
 
@@ -95,28 +190,26 @@ const AdminDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard
             title="Active Orders"
-            value="24"
+            value={stats.activeOrders.toString()}
             icon={Package}
-            trend={{ value: 12, isPositive: true }}
             className="opacity-0 animate-fade-in-up stagger-1"
           />
           <StatCard
             title="Production Rate"
-            value="94%"
+            value={`${stats.productionRate}%`}
             icon={TrendingUp}
-            trend={{ value: 3, isPositive: true }}
             className="opacity-0 animate-fade-in-up stagger-2"
           />
           <StatCard
             title="Quality Score"
-            value="98.5"
+            value={stats.qualityScore.toString()}
             subtitle="Out of 100"
             icon={ClipboardCheck}
             className="opacity-0 animate-fade-in-up stagger-3"
           />
           <StatCard
             title="Inventory Alerts"
-            value="3"
+            value={stats.inventoryAlerts.toString()}
             icon={AlertTriangle}
             className="opacity-0 animate-fade-in-up stagger-4"
           />
@@ -140,37 +233,47 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="space-y-4">
-              {productionOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="flex items-center gap-4 p-4 rounded-xl bg-secondary/20 hover:bg-secondary/35 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium">{order.id}</span>
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded-full ${
-                          order.status === "On Track"
-                            ? "bg-success/20 text-success"
-                            : "bg-warning/20 text-warning"
-                        }`}
-                      >
-                        {order.status}
-                      </span>
+              {loading ? (
+                <p className="text-muted-foreground">Loading production orders...</p>
+              ) : productionOrders.length === 0 ? (
+                <p className="text-muted-foreground">No production orders found.</p>
+              ) : (
+                productionOrders.slice(0, 4).map((order) => {
+                  const progress = getProgressFromStatus(order);
+                  const status = getStatusFromOrder(order);
+                  return (
+                    <div
+                      key={order.id}
+                      className="flex items-center gap-4 p-4 rounded-xl bg-secondary/20 hover:bg-secondary/35 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium">{order.id}</span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full ${
+                              status === "On Track" || status === "Completed"
+                                ? "bg-success/20 text-success"
+                                : "bg-warning/20 text-warning"
+                            }`}
+                          >
+                            {status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {order.product_name || "Unknown Product"}
+                        </p>
+                      </div>
+                      <div className="w-32">
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-muted-foreground">Progress</span>
+                          <span className="font-medium">{progress}%</span>
+                        </div>
+                        <Progress value={progress} className="h-2" />
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {order.product}
-                    </p>
-                  </div>
-                  <div className="w-32">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-muted-foreground">Progress</span>
-                      <span className="font-medium">{order.progress}%</span>
-                    </div>
-                    <Progress value={order.progress} className="h-2" />
-                  </div>
-                </div>
-              ))}
+                  );
+                })
+              )}
             </div>
           </GlassCard>
 
@@ -184,7 +287,10 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              {inventoryAlerts.map((alert, index) => (
+              {inventoryAlerts.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No inventory alerts</p>
+              ) : (
+                inventoryAlerts.map((alert, index) => (
                 <div
                   key={index}
                   className="p-3 rounded-xl bg-secondary/30 border-l-4"
@@ -202,7 +308,8 @@ const AdminDashboard: React.FC = () => {
                     Stock: {alert.stock} / Min: {alert.threshold}
                   </p>
                 </div>
-              ))}
+                ))
+              )}
             </div>
 
             <Button variant="outline" className="w-full mt-4">
@@ -225,7 +332,10 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="grid md:grid-cols-3 gap-4">
-              {aiSuggestions.map((suggestion, index) => (
+              {aiSuggestions.length === 0 ? (
+                <p className="text-sm text-muted-foreground col-span-3">No AI suggestions available</p>
+              ) : (
+                aiSuggestions.map((suggestion, index) => (
                 <div
                   key={index}
                   className="p-4 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5 border border-primary/10 hover:border-primary/20 transition-colors"
@@ -235,7 +345,8 @@ const AdminDashboard: React.FC = () => {
                     Apply Suggestion →
                   </Button>
                 </div>
-              ))}
+                ))
+              )}
             </div>
           </GlassCard>
         </div>

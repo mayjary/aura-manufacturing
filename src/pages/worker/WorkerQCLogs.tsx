@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api";
 
 const navItems = [
   { label: "Tasks", href: "/worker", icon: ClipboardList },
@@ -62,28 +63,46 @@ const WorkerQCLogs: React.FC = () => {
     }
   };
 
-  const handleSubmit = () => {
-    if (!selectedOrder) {
-      toast({ title: "Please select an order", variant: "destructive" });
-      return;
-    }
-    
-    if (checkedItems.length < 3) {
-      toast({ title: "Please complete at least 3 checklist items", variant: "destructive" });
-      return;
-    }
+
+const handleSubmit = async () => {
+  if (!selectedOrder) {
+    toast({ title: "Please select an order", variant: "destructive" });
+    return;
+  }
+
+  if (checkedItems.length < 3) {
+    toast({ title: "Please complete at least 3 checklist items", variant: "destructive" });
+    return;
+  }
+
+  try {
+    await apiFetch("/qc/submit", {
+      method: "POST",
+      body: JSON.stringify({
+        production_order_id: selectedOrder,
+        checklist: checkedItems,
+        defect_count: Number(defectCount || 0),
+        notes,
+      }),
+    });
 
     toast({
       title: "QC Log Submitted",
-      description: `Log for ${selectedOrder} has been recorded.`,
+      description: "Quality check recorded successfully.",
     });
 
-    // Reset form
     setSelectedOrder("");
     setDefectCount("");
     setNotes("");
     setCheckedItems([]);
-  };
+  } catch (err: any) {
+    toast({
+      title: "Submission failed",
+      description: err.message,
+      variant: "destructive",
+    });
+  }
+};
 
   return (
     <div className="min-h-screen bg-background">

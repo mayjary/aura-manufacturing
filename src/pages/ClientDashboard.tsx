@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { FloatingNav } from "@/components/ui/floating-nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { StatCard } from "@/components/ui/stat-card";
@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/use-auth";
+import AuthErrorDialog from "@/components/AuthErrorDialog";
 
 const navItems = [
   { label: "Orders", href: "/client", icon: Package },
@@ -68,14 +70,55 @@ const orders = [
 
 const ClientDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, userRole } = useAuth();
+  const [showAuthError, setShowAuthError] = useState(false);
+  const [authError, setAuthError] = useState<string>("");
+
+  // Check authentication on mount
+  useEffect(() => {
+    if (isAuthenticated === false) {
+      setAuthError("You need to be logged in to access the client dashboard.");
+      setShowAuthError(true);
+      return;
+    }
+    if (isAuthenticated === true && userRole !== "client") {
+      setAuthError("You don't have permission to access the client dashboard.");
+      setShowAuthError(true);
+      return;
+    }
+  }, [isAuthenticated, userRole]);
 
   const handleLogout = () => {
     sessionStorage.clear();
+    localStorage.clear();
     navigate("/");
   };
 
+  // Don't render content if not authenticated
+  if (!isAuthenticated || userRole !== "client") {
+    return (
+      <>
+        <AuthErrorDialog
+          open={showAuthError}
+          onOpenChange={setShowAuthError}
+          message={authError}
+        />
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <GlassCard className="p-8 text-center">
+            <p className="text-muted-foreground">Checking authentication...</p>
+          </GlassCard>
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
+      <AuthErrorDialog
+        open={showAuthError}
+        onOpenChange={setShowAuthError}
+        message={authError}
+      />
       {/* Background gradient */}
       <div className="fixed inset-0 bg-gradient-to-br from-background via-background to-success/5 pointer-events-none" />
 

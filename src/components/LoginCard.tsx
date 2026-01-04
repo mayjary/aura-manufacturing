@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 interface LoginCardProps {
   role: "admin" | "client" | "worker";
@@ -26,20 +27,32 @@ const LoginCard: React.FC<LoginCardProps> = ({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError("");
 
-    // Simulate login - replace with actual auth
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const data = await apiFetch("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          username: email,
+          password,
+        }),
+      });
 
-    // Store role in session (simplified)
-    sessionStorage.setItem("userRole", role);
-    sessionStorage.setItem("userEmail", email);
+      // 🔑 Store auth data
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("role", data.role);
 
-    setIsLoading(false);
-    navigate(redirectPath);
+      navigate(redirectPath);
+    } catch (err: any) {
+      setError(err.message || "Login failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -57,14 +70,14 @@ const LoginCard: React.FC<LoginCardProps> = ({
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="email" className="text-sm font-medium">
-            Email
+            Email / Username
           </Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input
               id="email"
-              type="email"
-              placeholder="Enter your email"
+              type="text"
+              placeholder="Enter your username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={cn(
@@ -98,6 +111,10 @@ const LoginCard: React.FC<LoginCardProps> = ({
             />
           </div>
         </div>
+
+        {error && (
+          <p className="text-sm text-destructive text-center">{error}</p>
+        )}
 
         <Button
           type="submit"

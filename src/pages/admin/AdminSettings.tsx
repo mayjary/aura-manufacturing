@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import SettingsLayout from "@/components/settings/SettingsLayout";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { apiFetch, AuthError } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
+import AuthErrorDialog from "@/components/AuthErrorDialog";
 
 const sidebarItems = [
   { id: "general", label: "General", icon: Settings },
@@ -31,366 +34,525 @@ const sidebarItems = [
 interface Product {
   id: string;
   name: string;
-  materials: { name: string; quantity: number }[];
-  defectRate: number;
+  defect_rate: number;
 }
 
 interface Material {
   id: string;
   name: string;
-  stock: number;
-  threshold: number;
-  supplier: string;
+  current_stock: number;
+  reorder_threshold: number;
+  supplier?: string;
+  status?: string;
 }
 
 const AdminSettings: React.FC = () => {
+  const { isAuthenticated, userRole } = useAuth();
+  const [showAuthError, setShowAuthError] = useState(false);
+  const [authError, setAuthError] = useState<string>("");
   const [activeSection, setActiveSection] = useState("general");
-  
-  const [products, setProducts] = useState<Product[]>([
-    { id: "1", name: "Engine Assembly", materials: [{ name: "Steel", quantity: 50 }, { name: "Copper", quantity: 10 }], defectRate: 2 },
-    { id: "2", name: "Transmission Unit", materials: [{ name: "Aluminum", quantity: 30 }], defectRate: 1.5 },
-  ]);
-  
-  const [materials, setMaterials] = useState<Material[]>([
-    { id: "1", name: "Steel Sheets", stock: 500, threshold: 100, supplier: "SteelCo" },
-    { id: "2", name: "Copper Wire", stock: 200, threshold: 50, supplier: "MetalWorks" },
-    { id: "3", name: "Aluminum Plates", stock: 300, threshold: 75, supplier: "AlumniPro" },
-  ]);
-  
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Check authentication on mount
+  useEffect(() => {
+    if (isAuthenticated === false) {
+      setAuthError("You need to be logged in to access admin settings.");
+      setShowAuthError(true);
+      return;
+    }
+    if (isAuthenticated === true && userRole !== "admin") {
+      setAuthError("You don't have permission to access admin settings.");
+      setShowAuthError(true);
+      return;
+    }
+  }, [isAuthenticated, userRole]);
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+
   const [qualityRules, setQualityRules] = useState({
-    maxDefectPercentage: 5,
-    qcPassScore: 85,
-    reworkAllowance: 3,
+    max_defect_percentage: 0,
+    qc_pass_score: 0,
+    rework_allowance: 0,
   });
-  
+
   const [aiSettings, setAiSettings] = useState({
-    historicalDefectRate: 3.5,
-    safetySurplus: 10,
-    materialBuffer: 15,
+    historical_defect_rate: 0,
+    safety_surplus: 0,
+    material_buffer: 0,
   });
-  
+
   const [accessCodes, setAccessCodes] = useState({
-    projectCode: "MFG-2024-X7K9",
-    clientPasscode: "CLT-8472-PASS",
+    project_code: "",
+    client_passcode: "",
   });
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copied to clipboard" });
-  };
+  /* -------------------- GET PROJECT ID -------------------- */
+  
+  useEffect(() => {
+    // Get first project ID - in a real app, this would come from user context
+    const fetchProjectId = async () => {
+      try {
+        // Try to get project_id from localStorage or use a default
+        // For now, we'll use a placeholder - this should be properly implemented
+        const storedProjectId = localStorage.getItem("project_id");
+        if (storedProjectId) {
+          setProjectId(storedProjectId);
+        } else {
+          // Use default project ID - backend should handle this better
+          setProjectId("1");
+        }
+      } catch (err) {
+        console.error("Failed to get project ID", err);
+        setProjectId("1"); // fallback
+      }
+    };
+    fetchProjectId();
+  }, []);
 
-  const regenerateCode = (type: "project" | "client") => {
-    const newCode = type === "project" 
-      ? `MFG-${Date.now().toString(36).toUpperCase()}`
-      : `CLT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    
-    setAccessCodes(prev => ({
-      ...prev,
-      [type === "project" ? "projectCode" : "clientPasscode"]: newCode,
-    }));
-    toast({ title: `${type === "project" ? "Project" : "Client"} code regenerated` });
-  };
+  /* -------------------- FETCH ON LOAD -------------------- */
 
-  const calculatedSurplus = Math.round(100 * (1 + aiSettings.safetySurplus / 100) * (1 + aiSettings.historicalDefectRate / 100));
-  const adjustedMaterialUsage = Math.round(100 * (1 + aiSettings.materialBuffer / 100));
+  useEffect(() => {
+    if (!projectId || !isAuthenticated || userRole !== "admin") return;
 
-  const renderContent = () => {
-    switch (activeSection) {
-      case "general":
-        return (
-          <GlassCard className="animate-fade-in-up">
-            <h3 className="text-lg font-semibold mb-6">General Settings</h3>
-            <div className="space-y-4">
-              <div>
-                <Label>Factory Name</Label>
-                <Input defaultValue="Smart Manufacturing Co." className="mt-2" />
-              </div>
-              <div>
-                <Label>Time Zone</Label>
-                <Input defaultValue="UTC-5 (Eastern Time)" className="mt-2" />
-              </div>
-              <div>
-                <Label>Default Production Shift</Label>
-                <Input defaultValue="8:00 AM - 4:00 PM" className="mt-2" />
-              </div>
-              <Button className="mt-4">Save Changes</Button>
-            </div>
-          </GlassCard>
-        );
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch products
+        const productsData = await apiFetch(`/products?project_id=${projectId}`).catch(() => []);
+        setProducts(productsData || []);
 
-      case "products":
-        return (
-          <div className="space-y-4 animate-fade-in-up">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Products</h3>
-              <Button size="sm" className="gap-2">
-                <Plus className="w-4 h-4" />
-                Add Product
-              </Button>
-            </div>
-            {products.map((product) => (
-              <GlassCard key={product.id}>
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h4 className="font-medium">{product.name}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Expected defect: {product.defectRate}%
-                    </p>
-                  </div>
-                  <Button variant="ghost" size="icon" className="text-destructive">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Required Materials</Label>
-                  {product.materials.map((mat, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">•</span>
-                      <span>{mat.name}: {mat.quantity} units</span>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-        );
+        // Fetch inventory/materials
+        const materialsData = await apiFetch("/inventory").catch(() => []);
+        setMaterials(materialsData || []);
 
-      case "materials":
-        return (
-          <div className="space-y-4 animate-fade-in-up">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Raw Materials</h3>
-              <Button size="sm" className="gap-2">
-                <Plus className="w-4 h-4" />
-                Add Material
-              </Button>
-            </div>
-            {materials.map((material) => (
-              <GlassCard key={material.id}>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h4 className="font-medium">{material.name}</h4>
-                    <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Stock: </span>
-                        <span className={cn(
-                          "font-medium",
-                          material.stock < material.threshold && "text-destructive"
-                        )}>
-                          {material.stock}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Threshold: </span>
-                        <span>{material.threshold}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Supplier: </span>
-                        <span>{material.supplier}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="icon" className="text-destructive">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-        );
+        // Fetch quality rules
+        const qualityData = await apiFetch(`/quality-rules?project_id=${projectId}`).catch(() => null);
+        if (qualityData) {
+          setQualityRules({
+            max_defect_percentage: qualityData.max_defect_percentage || 0,
+            qc_pass_score: qualityData.qc_pass_score || 0,
+            rework_allowance: qualityData.rework_allowance || 0,
+          });
+        }
 
-      case "quality":
-        return (
-          <GlassCard className="animate-fade-in-up">
-            <h3 className="text-lg font-semibold mb-6">Quality Rules</h3>
-            <div className="space-y-6">
-              <div>
-                <Label>Maximum Defect Percentage</Label>
-                <div className="flex items-center gap-2 mt-2">
-                  <Input
-                    type="number"
-                    value={qualityRules.maxDefectPercentage}
-                    onChange={(e) => setQualityRules(prev => ({ ...prev, maxDefectPercentage: Number(e.target.value) }))}
-                    className="w-24"
-                  />
-                  <span className="text-muted-foreground">%</span>
-                </div>
-              </div>
-              <div>
-                <Label>QC Pass Score</Label>
-                <div className="flex items-center gap-2 mt-2">
-                  <Input
-                    type="number"
-                    value={qualityRules.qcPassScore}
-                    onChange={(e) => setQualityRules(prev => ({ ...prev, qcPassScore: Number(e.target.value) }))}
-                    className="w-24"
-                  />
-                  <span className="text-muted-foreground">/ 100</span>
-                </div>
-              </div>
-              <div>
-                <Label>Rework Allowance</Label>
-                <div className="flex items-center gap-2 mt-2">
-                  <Input
-                    type="number"
-                    value={qualityRules.reworkAllowance}
-                    onChange={(e) => setQualityRules(prev => ({ ...prev, reworkAllowance: Number(e.target.value) }))}
-                    className="w-24"
-                  />
-                  <span className="text-muted-foreground">times per order</span>
-                </div>
-              </div>
-              <Button>Save Quality Rules</Button>
-            </div>
-          </GlassCard>
-        );
+        // Fetch AI settings (placeholder for now)
+        try {
+          const aiData = await apiFetch("/ai/settings");
+          if (aiData && !aiData.message) {
+            setAiSettings(aiData);
+          }
+        } catch {
+          // AI settings endpoint might not be fully implemented
+        }
 
-      case "ai":
-        return (
-          <div className="space-y-4 animate-fade-in-up">
-            <GlassCard>
-              <h3 className="text-lg font-semibold mb-6">AI & Optimization Settings</h3>
-              <div className="space-y-6">
-                <div>
-                  <Label>Historical Defect Rate</Label>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={aiSettings.historicalDefectRate}
-                      onChange={(e) => setAiSettings(prev => ({ ...prev, historicalDefectRate: Number(e.target.value) }))}
-                      className="w-24"
-                    />
-                    <span className="text-muted-foreground">%</span>
-                  </div>
-                </div>
-                <div>
-                  <Label>Safety Surplus Percentage</Label>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Input
-                      type="number"
-                      value={aiSettings.safetySurplus}
-                      onChange={(e) => setAiSettings(prev => ({ ...prev, safetySurplus: Number(e.target.value) }))}
-                      className="w-24"
-                    />
-                    <span className="text-muted-foreground">%</span>
-                  </div>
-                </div>
-                <div>
-                  <Label>Material Buffer Percentage</Label>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Input
-                      type="number"
-                      value={aiSettings.materialBuffer}
-                      onChange={(e) => setAiSettings(prev => ({ ...prev, materialBuffer: Number(e.target.value) }))}
-                      className="w-24"
-                    />
-                    <span className="text-muted-foreground">%</span>
-                  </div>
-                </div>
-                <Button>Save AI Settings</Button>
-              </div>
-            </GlassCard>
+        // Fetch access codes
+        const accessData = await apiFetch(`/access-codes?project_id=${projectId}`).catch(() => null);
+        if (accessData) {
+          setAccessCodes({
+            project_code: accessData.project_code || "",
+            client_passcode: accessData.client_passcode || "",
+          });
+        }
+      } catch (err) {
+        if (err instanceof AuthError) {
+          setAuthError(err.message);
+          setShowAuthError(true);
+        } else {
+          console.error("Failed to fetch settings data", err);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
-            <GlassCard variant="prominent">
-              <div className="flex items-center gap-3 mb-4">
-                <Sparkles className="w-5 h-5 text-primary" />
-                <h4 className="font-semibold">Live Calculated Outputs</h4>
-              </div>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="p-3 rounded-lg bg-secondary/30">
-                  <p className="text-muted-foreground mb-1">Required Surplus Production</p>
-                  <p className="text-xl font-semibold text-primary">{calculatedSurplus}%</p>
-                </div>
-                <div className="p-3 rounded-lg bg-secondary/30">
-                  <p className="text-muted-foreground mb-1">Adjusted Material Usage</p>
-                  <p className="text-xl font-semibold text-primary">{adjustedMaterialUsage}%</p>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground mt-4">
-                💡 AI suggests increasing buffer to 20% based on seasonal demand patterns.
-              </p>
-            </GlassCard>
-          </div>
-        );
+    fetchData();
+  }, [projectId, isAuthenticated, userRole]);
 
-      case "access":
-        return (
-          <GlassCard className="animate-fade-in-up">
-            <h3 className="text-lg font-semibold mb-6">Access Codes</h3>
-            <div className="space-y-6">
-              <div>
-                <Label>Project Code</Label>
-                <div className="flex items-center gap-2 mt-2">
-                  <Input
-                    value={accessCodes.projectCode}
-                    readOnly
-                    className="font-mono bg-secondary/30"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(accessCodes.projectCode)}
-                  >
-                    <Copy className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => regenerateCode("project")}
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-              <div>
-                <Label>Client Passcode</Label>
-                <div className="flex items-center gap-2 mt-2">
-                  <Input
-                    value={accessCodes.clientPasscode}
-                    readOnly
-                    className="font-mono bg-secondary/30"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(accessCodes.clientPasscode)}
-                  >
-                    <Copy className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => regenerateCode("client")}
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-              <div className="pt-4 border-t border-border/30">
-                <Button variant="destructive" size="sm">
-                  Disable All Access Codes
-                </Button>
-              </div>
-            </div>
-          </GlassCard>
-        );
+  /* -------------------- PRODUCTS -------------------- */
 
-      default:
-        return null;
+  const addProduct = async () => {
+    if (!projectId) {
+      toast({ title: "Project ID not available", variant: "destructive" });
+      return;
+    }
+
+    const name = prompt("Product name");
+    if (!name) return;
+
+    try {
+      const product = await apiFetch("/products", {
+        method: "POST",
+        body: JSON.stringify({ 
+          project_id: projectId,
+          name, 
+          defect_rate: 0 
+        }),
+      });
+
+      setProducts((p) => [...p, product]);
+      toast({ title: "Product added" });
+    } catch (err: any) {
+      toast({ title: "Failed to add product", description: err.message, variant: "destructive" });
     }
   };
 
+  const deleteProduct = async (id: string) => {
+    try {
+      // DELETE endpoint doesn't exist yet - handle gracefully
+      await apiFetch(`/products/${id}`, { method: "DELETE" }).catch(() => {
+        // If DELETE fails, just remove from local state for now
+        setProducts((p) => p.filter((x) => x.id !== id));
+        toast({ title: "Product removed (local only - backend DELETE not implemented)" });
+        throw new Error("DELETE not implemented");
+      });
+      setProducts((p) => p.filter((x) => x.id !== id));
+      toast({ title: "Product removed" });
+    } catch (err: any) {
+      // Already handled above
+    }
+  };
+
+  /* -------------------- MATERIALS -------------------- */
+
+  const addMaterial = async () => {
+    const name = prompt("Material name");
+    if (!name) return;
+
+    try {
+      // POST endpoint doesn't exist yet - handle gracefully
+      const material = await apiFetch("/inventory", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          current_stock: 0,
+          reorder_threshold: 0,
+        }),
+      }).catch(() => {
+        // If POST fails, add to local state for now
+        const newMaterial = {
+          id: `temp-${Date.now()}`,
+          name,
+          current_stock: 0,
+          reorder_threshold: 0,
+        };
+        setMaterials((m) => [...m, newMaterial]);
+        toast({ title: "Material added (local only - backend POST not implemented)" });
+        throw new Error("POST not implemented");
+      });
+
+      setMaterials((m) => [...m, material]);
+      toast({ title: "Material added" });
+    } catch (err: any) {
+      // Already handled above
+    }
+  };
+
+  const deleteMaterial = async (id: string) => {
+    try {
+      // DELETE endpoint doesn't exist yet - handle gracefully
+      await apiFetch(`/inventory/${id}`, { method: "DELETE" }).catch(() => {
+        // If DELETE fails, just remove from local state for now
+        setMaterials((m) => m.filter((x) => x.id !== id));
+        toast({ title: "Material removed (local only - backend DELETE not implemented)" });
+        throw new Error("DELETE not implemented");
+      });
+      setMaterials((m) => m.filter((x) => x.id !== id));
+      toast({ title: "Material removed" });
+    } catch (err: any) {
+      // Already handled above
+    }
+  };
+
+  /* -------------------- QUALITY -------------------- */
+
+  const saveQualityRules = async () => {
+    if (!projectId) {
+      toast({ title: "Project ID not available", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await apiFetch("/quality-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          project_id: projectId,
+          ...qualityRules,
+        }),
+      });
+      toast({ title: "Quality rules saved" });
+    } catch (err: any) {
+      toast({ title: "Failed to save quality rules", description: err.message, variant: "destructive" });
+    }
+  };
+
+  /* -------------------- AI -------------------- */
+
+  const saveAISettings = async () => {
+    await apiFetch("/ai/settings", {
+      method: "POST",
+      body: JSON.stringify(aiSettings),
+    });
+    toast({ title: "AI settings saved" });
+  };
+
+  /* -------------------- ACCESS CODES -------------------- */
+
+  const regenerateCode = async (type: "project" | "client") => {
+    if (!projectId) {
+      toast({ title: "Project ID not available", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const data = await apiFetch("/access-codes/regenerate", {
+        method: "POST",
+        body: JSON.stringify({ project_id: projectId }),
+      });
+      setAccessCodes({
+        project_code: data.project_code || "",
+        client_passcode: data.client_passcode || "",
+      });
+      toast({ title: "Code regenerated" });
+    } catch (err: any) {
+      toast({ title: "Failed to regenerate code", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const disableAccess = async () => {
+    try {
+      // DELETE endpoint doesn't exist yet - handle gracefully
+      await apiFetch("/access-codes/disable", { method: "POST" }).catch(() => {
+        toast({ title: "Disable access not implemented in backend yet", variant: "destructive" });
+        throw new Error("Not implemented");
+      });
+      toast({ title: "Access disabled" });
+    } catch (err: any) {
+      // Already handled above
+    }
+  };
+
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied" });
+  };
+
+  /* -------------------- RENDER -------------------- */
+
+  // Don't render content if not authenticated
+  if (!isAuthenticated || userRole !== "admin") {
+    return (
+      <>
+        <AuthErrorDialog
+          open={showAuthError}
+          onOpenChange={setShowAuthError}
+          message={authError}
+        />
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <GlassCard className="p-8 text-center">
+            <p className="text-muted-foreground">Checking authentication...</p>
+          </GlassCard>
+        </div>
+      </>
+    );
+  }
+
   return (
-    <SettingsLayout
+    <>
+      <AuthErrorDialog
+        open={showAuthError}
+        onOpenChange={setShowAuthError}
+        message={authError}
+      />
+      <SettingsLayout
       sidebarItems={sidebarItems}
       activeSection={activeSection}
       onSectionChange={setActiveSection}
       backPath="/admin"
       title="Admin Settings"
     >
-      {renderContent()}
+      {loading && activeSection !== "general" && (
+        <GlassCard>
+          <p className="text-muted-foreground">Loading...</p>
+        </GlassCard>
+      )}
+
+      {!loading && activeSection === "products" && (
+        <div className="space-y-4">
+          <Button size="sm" onClick={addProduct} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Product
+          </Button>
+          {products.length === 0 ? (
+            <GlassCard>
+              <p className="text-muted-foreground">No products found. Add one to get started.</p>
+            </GlassCard>
+          ) : (
+            products.map((p) => (
+            <GlassCard key={p.id} className="flex justify-between items-center">
+              <div>
+                <p className="font-medium">{p.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  Defect rate: {p.defect_rate || 0}%
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-destructive"
+                onClick={() => deleteProduct(p.id)}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </GlassCard>
+            ))
+          )}
+        </div>
+      )}
+
+      {!loading && activeSection === "materials" && (
+        <div className="space-y-4">
+          <Button size="sm" onClick={addMaterial} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Material
+          </Button>
+          {materials.length === 0 ? (
+            <GlassCard>
+              <p className="text-muted-foreground">No materials found. Add one to get started.</p>
+            </GlassCard>
+          ) : (
+            materials.map((m) => (
+            <GlassCard key={m.id} className="flex justify-between items-center">
+              <div>
+                <p className="font-medium">{m.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  Stock: {m.current_stock} | Threshold: {m.reorder_threshold}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-destructive"
+                onClick={() => deleteMaterial(m.id)}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </GlassCard>
+            ))
+          )}
+        </div>
+      )}
+
+      {!loading && activeSection === "quality" && (
+        <GlassCard>
+          <Label>Max Defect %</Label>
+          <Input
+            value={qualityRules.max_defect_percentage}
+            onChange={(e) =>
+              setQualityRules((q) => ({
+                ...q,
+                max_defect_percentage: Number(e.target.value),
+              }))
+            }
+          />
+          <Label className="mt-4">QC Pass Score</Label>
+          <Input
+            value={qualityRules.qc_pass_score}
+            onChange={(e) =>
+              setQualityRules((q) => ({
+                ...q,
+                qc_pass_score: Number(e.target.value),
+              }))
+            }
+          />
+          <Label className="mt-4">Rework Allowance</Label>
+          <Input
+            value={qualityRules.rework_allowance}
+            onChange={(e) =>
+              setQualityRules((q) => ({
+                ...q,
+                rework_allowance: Number(e.target.value),
+              }))
+            }
+          />
+          <Button className="mt-4" onClick={saveQualityRules}>
+            Save Quality Rules
+          </Button>
+        </GlassCard>
+      )}
+
+      {!loading && activeSection === "ai" && (
+        <GlassCard>
+          <Label>Historical Defect Rate</Label>
+          <Input
+            value={aiSettings.historical_defect_rate}
+            onChange={(e) =>
+              setAiSettings((a) => ({
+                ...a,
+                historical_defect_rate: Number(e.target.value),
+              }))
+            }
+          />
+          <Label className="mt-4">Safety Surplus %</Label>
+          <Input
+            value={aiSettings.safety_surplus}
+            onChange={(e) =>
+              setAiSettings((a) => ({
+                ...a,
+                safety_surplus: Number(e.target.value),
+              }))
+            }
+          />
+          <Label className="mt-4">Material Buffer %</Label>
+          <Input
+            value={aiSettings.material_buffer}
+            onChange={(e) =>
+              setAiSettings((a) => ({
+                ...a,
+                material_buffer: Number(e.target.value),
+              }))
+            }
+          />
+          <Button className="mt-4" onClick={saveAISettings}>
+            Save AI Settings
+          </Button>
+        </GlassCard>
+      )}
+
+      {!loading && activeSection === "access" && (
+        <GlassCard>
+          <Label>Project Code</Label>
+          <div className="flex gap-2">
+            <Input value={accessCodes.project_code} readOnly />
+            <Button onClick={() => copy(accessCodes.project_code)}>
+              <Copy className="w-4 h-4" />
+            </Button>
+            <Button onClick={() => regenerateCode("project")}>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </div>
+
+          <Label className="mt-4">Client Passcode</Label>
+          <div className="flex gap-2">
+            <Input value={accessCodes.client_passcode} readOnly />
+            <Button onClick={() => copy(accessCodes.client_passcode)}>
+              <Copy className="w-4 h-4" />
+            </Button>
+            <Button onClick={() => regenerateCode("client")}>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </div>
+
+          <Button
+            variant="destructive"
+            className="mt-6"
+            onClick={disableAccess}
+          >
+            Disable All Access
+          </Button>
+        </GlassCard>
+      )}
     </SettingsLayout>
+    </>
   );
 };
 
