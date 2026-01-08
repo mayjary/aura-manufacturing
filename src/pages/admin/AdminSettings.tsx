@@ -384,10 +384,49 @@ const AdminSettings: React.FC = () => {
       backPath="/admin"
       title="Admin Settings"
     >
-      {loading && activeSection !== "general" && (
+      {loading && (
         <GlassCard>
           <p className="text-muted-foreground">Loading...</p>
         </GlassCard>
+      )}
+
+      {!loading && activeSection === "general" && (
+        <div className="space-y-6">
+          <GlassCard>
+            <h3 className="text-lg font-semibold mb-4">General Settings</h3>
+            <div className="space-y-4">
+              <div>
+                <Label>Project Name</Label>
+                <Input placeholder="Manufacturing Project" className="mt-2" />
+              </div>
+              <div>
+                <Label>Timezone</Label>
+                <Input value="UTC" readOnly className="mt-2 bg-muted/50" />
+              </div>
+              <div>
+                <Label>Default Language</Label>
+                <Input value="English" readOnly className="mt-2 bg-muted/50" />
+              </div>
+            </div>
+          </GlassCard>
+          <GlassCard>
+            <h3 className="text-lg font-semibold mb-4">Notifications</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Email alerts for low stock</span>
+                <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-border" />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Daily production summary</span>
+                <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-border" />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Quality alerts</span>
+                <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-border" />
+              </div>
+            </div>
+          </GlassCard>
+        </div>
       )}
 
       {!loading && projectId && activeSection === "products" && (

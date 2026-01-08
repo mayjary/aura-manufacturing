@@ -355,9 +355,12 @@ const AdminQuality: React.FC = () => {
             </div>
           </GlassCard>
         </div>
+
+        {/* Research-backed Worker Quality Comparison Section */}
+        <div className="mt-8 opacity-0 animate-fade-in-up stagger-4">
+          <WorkerQualityTable />
+        </div>
       </main>
-      {/* Research-backed Worker Quality Comparison Section */}
-      <WorkerQualityTable />
     </div>
   );
 };
