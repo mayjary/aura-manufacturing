@@ -43,6 +43,8 @@ const defectTrend = [
 interface QCLog {
   id: string;
   production_order_id: string;
+  product_name?: string;
+  worker_name?: string;
   defect_count: number;
   qc_status?: string;
   created_at: string;
@@ -81,7 +83,7 @@ const AdminQuality: React.FC = () => {
 
     const fetchQCLogs = async () => {
       try {
-        const logs = await apiFetch("/qc/logs");
+        const logs = await apiFetch("/quality/logs");
         setQcLogs(logs || []);
 
         // Calculate stats
@@ -282,7 +284,14 @@ const AdminQuality: React.FC = () => {
                       const score = calculateScore(log);
                       return (
                         <tr key={log.id} className="border-b border-border/20 last:border-0">
-                          <td className="py-4 font-medium">{log.production_order_id || "N/A"}</td>
+                          <td className="py-4 font-medium">
+                            <div>
+                              <p>{log.product_name || "Unknown Product"}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Worker: {log.worker_name || "Unassigned"}
+                              </p>
+                            </div>
+                          </td>
                           <td className="py-4">
                             <span className={cn(
                               log.defect_count > 5 && "text-destructive",

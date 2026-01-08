@@ -132,7 +132,7 @@ const AdminSettings: React.FC = () => {
         setMaterials(materialsData || []);
 
         // Fetch quality rules
-        const qualityData = await apiFetch(`/quality-rules?project_id=${projectId}`).catch(() => null);
+        const qualityData = await apiFetch(`/quality/logs?project_id=${projectId}`).catch(() => null);
         if (qualityData) {
           setQualityRules({
             max_defect_percentage: qualityData.max_defect_percentage || 0,
@@ -278,7 +278,7 @@ const AdminSettings: React.FC = () => {
     }
 
     try {
-      await apiFetch("/quality-rules", {
+      await apiFetch("/quality/logs", {
         method: "POST",
         body: JSON.stringify({
           project_id: projectId,
