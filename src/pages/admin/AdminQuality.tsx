@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import AuthErrorDialog from "@/components/AuthErrorDialog";
+import WorkerQualityTable from "@/components/WorkerQualityTable";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -355,6 +356,8 @@ const AdminQuality: React.FC = () => {
           </GlassCard>
         </div>
       </main>
+      {/* Research-backed Worker Quality Comparison Section */}
+      <WorkerQualityTable />
     </div>
   );
 };

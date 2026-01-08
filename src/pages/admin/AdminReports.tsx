@@ -134,14 +134,14 @@ const AdminReports: React.FC = () => {
 
           if (template.id === "production" && productionData) {
             stats = [
-              { label: "Orders Completed", value: String(productionData.orders_completed || 0) },
-              { label: "On-Time Rate", value: `${productionData.on_time_rate || 0}%` },
-              { label: "Avg Cycle Time", value: `${productionData.avg_cycle_time || 0} days` },
+              { label: "Orders Completed", value: String(productionData.completed_orders || productionData.orders_completed || 0) },
+              { label: "On-Time Rate", value: `${productionData.on_time_rate || productionData.completion_rate || 0}%` },
+              { label: "Avg Cycle Time", value: `${productionData.avg_cycle_time_days || productionData.avg_cycle_time || 0} days` },
             ];
           } else if (template.id === "inventory" && inventoryData) {
             stats = [
-              { label: "Materials Used", value: String(inventoryData.materials_used || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ",") },
-              { label: "Low Stock Items", value: String(inventoryData.low_stock_items || 0) },
+              { label: "Materials Used", value: String(inventoryData.materials_used_count || inventoryData.materials_used || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ",") },
+              { label: "Low Stock Items", value: String(inventoryData.low_stock_count || inventoryData.low_stock_items || 0) },
               { label: "Reorders Made", value: String(inventoryData.reorders_made || 0) },
             ];
           } else if (template.id === "quality" && qualityData) {

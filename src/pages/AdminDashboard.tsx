@@ -69,7 +69,15 @@ const AdminDashboard: React.FC = () => {
       try {
         // Fetch production orders
         const orders = await apiFetch("/production/list").catch(() => []);
-        setProductionOrders(orders || []);
+        // Fetch products for name mapping
+        const products = await apiFetch("/products").catch(() => []);
+        const productMap = Object.fromEntries((products || []).map((p: any) => [p.id, p.name]));
+        setProductionOrders(
+          (orders || []).map((order: any) => ({
+            ...order,
+            product_name: order.product_name || productMap[order.product_id] || "Unknown Product",
+          }))
+        );
 
         // Fetch inventory
         const inventory = await apiFetch("/inventory").catch(() => []);

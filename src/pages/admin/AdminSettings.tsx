@@ -91,25 +91,29 @@ const AdminSettings: React.FC = () => {
   /* -------------------- GET PROJECT ID -------------------- */
   
   useEffect(() => {
-    // Get first project ID - in a real app, this would come from user context
+    if (!isAuthenticated || userRole !== "admin") return;
+  
     const fetchProjectId = async () => {
+      let storedProjectId = localStorage.getItem("project_id");
+      if (storedProjectId) {
+        setProjectId(storedProjectId);
+        return;
+      }
+      // Try to get project for current admin
       try {
-        // Try to get project_id from localStorage or use a default
-        // For now, we'll use a placeholder - this should be properly implemented
-        const storedProjectId = localStorage.getItem("project_id");
-        if (storedProjectId) {
-          setProjectId(storedProjectId);
+        const project = await apiFetch("/projects/my");
+        if (project && project.id) {
+          setProjectId(project.id);
+          localStorage.setItem("project_id", project.id);
         } else {
-          // Use default project ID - backend should handle this better
-          setProjectId("1");
+          setProjectId(null);
         }
-      } catch (err) {
-        console.error("Failed to get project ID", err);
-        setProjectId("1"); // fallback
+      } catch {
+        setProjectId(null);
       }
     };
     fetchProjectId();
-  }, []);
+  }, [isAuthenticated, userRole]);  
 
   /* -------------------- FETCH ON LOAD -------------------- */
 
@@ -358,6 +362,14 @@ const AdminSettings: React.FC = () => {
     );
   }
 
+  if (!projectId) {
+    return (
+      <GlassCard className="p-8 text-center mt-12">
+        <p className="text-muted-foreground">No project selected. Please select or create a project to view settings.</p>
+      </GlassCard>
+    );
+  }
+
   return (
     <>
       <AuthErrorDialog
@@ -378,7 +390,7 @@ const AdminSettings: React.FC = () => {
         </GlassCard>
       )}
 
-      {!loading && activeSection === "products" && (
+      {!loading && projectId && activeSection === "products" && (
         <div className="space-y-4">
           <Button size="sm" onClick={addProduct} className="gap-2">
             <Plus className="w-4 h-4" /> Add Product
