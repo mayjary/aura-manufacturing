@@ -24,11 +24,8 @@ import { toast } from "@/hooks/use-toast";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import AuthErrorDialog from "@/components/AuthErrorDialog";
-import AddProductModal, { ProductFormData } from "@/components/modals/AddProductModal";
-import AddMaterialModal, { MaterialFormData } from "@/components/modals/AddMaterialModal";
-import ProductMaterialMappingModal, { MaterialMapping } from "@/components/modals/ProductMaterialMappingModal";
-import ProductChecklistModal, { ChecklistItem } from "@/components/modals/ProductChecklistModal";
-import { Badge } from "@/components/ui/badge";
+import { AddProductModal } from "@/components/modals/AddProductModal";
+import { AddMaterialModal } from "@/components/modals/AddMaterialModal";
 
 const sidebarItems = [
   { id: "general", label: "General", icon: Settings },
@@ -94,6 +91,8 @@ const AdminSettings: React.FC = () => {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
 
   const [qualityRules, setQualityRules] = useState({
     max_defect_percentage: 0,
@@ -200,7 +199,7 @@ const AdminSettings: React.FC = () => {
 
   /* -------------------- PRODUCTS -------------------- */
 
-  const handleAddProduct = async (productData: ProductFormData) => {
+  const addProduct = async (productData: { name: string; defect_rate: number }) => {
     if (!projectId) {
       throw new Error("Project ID not available");
     }
@@ -210,34 +209,17 @@ const AdminSettings: React.FC = () => {
         method: "POST",
         body: JSON.stringify({ 
           project_id: projectId,
-          name: productData.name,
-          defect_rate: productData.expected_defect_percent,
-          expected_defect_percent: productData.expected_defect_percent,
-          criticality_level: productData.criticality_level,
-          standard_cycle_time: productData.standard_cycle_time,
-          standard_inspection_time: productData.standard_inspection_time,
-          inspection_type: productData.inspection_type,
-          quality_tolerance: productData.quality_tolerance,
+          name: productData.name, 
+          defect_rate: productData.defect_rate,
+          expected_defect_percent: productData.defect_rate, // Map to schema field
         }),
       });
 
       setProducts((p) => [...p, product]);
       toast({ title: "Product added successfully" });
     } catch (err: any) {
-      // If POST fails, add to local state for demo
-      const newProduct: Product = {
-        id: `temp-${Date.now()}`,
-        name: productData.name,
-        defect_rate: productData.expected_defect_percent,
-        expected_defect_percent: productData.expected_defect_percent,
-        criticality_level: productData.criticality_level,
-        standard_cycle_time: productData.standard_cycle_time,
-        standard_inspection_time: productData.standard_inspection_time,
-        inspection_type: productData.inspection_type,
-        quality_tolerance: productData.quality_tolerance,
-      };
-      setProducts((p) => [...p, newProduct]);
-      toast({ title: "Product added (local only - backend not connected)" });
+      toast({ title: "Failed to add product", description: err.message, variant: "destructive" });
+      throw err; // Re-throw so modal can handle it
     }
   };
 
@@ -279,37 +261,34 @@ const AdminSettings: React.FC = () => {
 
   /* -------------------- MATERIALS -------------------- */
 
-  const handleAddMaterial = async (materialData: MaterialFormData) => {
+  const addMaterial = async (materialData: {
+    name: string;
+    current_stock: number;
+    reorder_threshold: number;
+    supplier?: string;
+  }) => {
+    if (!projectId) {
+      toast({ title: "Project ID not available", variant: "destructive" });
+      return;
+    }
+
     try {
       const material = await apiFetch("/inventory", {
         method: "POST",
         body: JSON.stringify({
+          project_id: projectId,
           name: materialData.name,
-          unit: materialData.unit,
           current_stock: materialData.current_stock,
           reorder_threshold: materialData.reorder_threshold,
           supplier: materialData.supplier,
-          quality_grade: materialData.quality_grade,
-          lead_time_days: materialData.lead_time_days,
         }),
       });
 
       setMaterials((m) => [...m, material]);
-      toast({ title: "Material added successfully" });
-    } catch {
-      // If POST fails, add to local state for demo
-      const newMaterial: Material = {
-        id: `temp-${Date.now()}`,
-        name: materialData.name,
-        unit: materialData.unit,
-        current_stock: materialData.current_stock,
-        reorder_threshold: materialData.reorder_threshold,
-        supplier: materialData.supplier,
-        quality_grade: materialData.quality_grade,
-        lead_time_days: materialData.lead_time_days,
-      };
-      setMaterials((m) => [...m, newMaterial]);
-      toast({ title: "Material added (local only - backend not connected)" });
+      toast({ title: "Material added" });
+    } catch (err: any) {
+      toast({ title: "Failed to add material", description: err.message, variant: "destructive" });
+      throw err; // Re-throw so modal can handle it
     }
   };
 
@@ -553,6 +532,42 @@ const AdminSettings: React.FC = () => {
           </div>
         )}
 
+      {!loading && projectId && activeSection === "products" && (
+        <div className="space-y-4">
+          <Button size="sm" onClick={() => setShowProductModal(true)} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Product
+          </Button>
+          <AddProductModal
+            open={showProductModal}
+            onOpenChange={setShowProductModal}
+            onSave={addProduct}
+          />
+          {products.length === 0 ? (
+            <GlassCard>
+              <p className="text-muted-foreground">No products found. Add one to get started.</p>
+            </GlassCard>
+          ) : (
+            products.map((p) => (
+            <GlassCard key={p.id} className="flex justify-between items-center">
+              <div>
+                <p className="font-medium">{p.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  Defect rate: {p.defect_rate || 0}%
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-destructive"
+                onClick={() => deleteProduct(p.id)}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </GlassCard>
+            ))
+          )}
+        </div>
+      )}
         {!loading && projectId && activeSection === "products" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -635,56 +650,42 @@ const AdminSettings: React.FC = () => {
           </div>
         )}
 
-        {!loading && activeSection === "materials" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+      {!loading && activeSection === "materials" && (
+        <div className="space-y-4">
+          <Button size="sm" onClick={() => setShowMaterialModal(true)} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Material
+          </Button>
+          <AddMaterialModal
+            open={showMaterialModal}
+            onOpenChange={setShowMaterialModal}
+            onSave={addMaterial}
+          />
+          {materials.length === 0 ? (
+            <GlassCard>
+              <p className="text-muted-foreground">No materials found. Add one to get started.</p>
+            </GlassCard>
+          ) : (
+            materials.map((m) => (
+            <GlassCard key={m.id} className="flex justify-between items-center">
               <div>
-                <h3 className="text-lg font-semibold">Materials</h3>
+                <p className="font-medium">{m.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  Manage raw materials and inventory thresholds
+                  Stock: {m.current_stock} | Threshold: {m.reorder_threshold}
                 </p>
               </div>
-              <Button size="sm" onClick={() => setShowAddMaterialModal(true)} className="gap-2">
-                <Plus className="w-4 h-4" /> Add Material
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-destructive"
+                onClick={() => deleteMaterial(m.id)}
+              >
+                <Trash2 className="w-4 h-4" />
               </Button>
-            </div>
-
-            {materials.length === 0 ? (
-              <GlassCard>
-                <p className="text-muted-foreground">No materials found. Add one to get started.</p>
-              </GlassCard>
-            ) : (
-              materials.map((m) => (
-                <GlassCard key={m.id} className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{m.name}</p>
-                      {getGradeBadge(m.quality_grade)}
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>
-                        Stock: {m.current_stock} {m.unit || "units"}
-                      </span>
-                      <span>Reorder at: {m.reorder_threshold}</span>
-                      {m.lead_time_days && <span>Lead: {m.lead_time_days} days</span>}
-                    </div>
-                    {m.supplier && (
-                      <p className="text-sm text-muted-foreground">Supplier: {m.supplier}</p>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-destructive"
-                    onClick={() => deleteMaterial(m.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </GlassCard>
-              ))
-            )}
-          </div>
-        )}
+            </GlassCard>
+            ))
+          )}
+        </div>
+      )}
 
         {!loading && activeSection === "quality" && (
           <GlassCard>
