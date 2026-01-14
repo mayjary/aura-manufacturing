@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { BottomNav } from "@/components/ui/bottom-nav";
 import { FloatingNav } from "@/components/ui/floating-nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { apiFetch, AuthError } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
+import { toast } from "@/hooks/use-toast";
 
 const navItems = [
   { label: "Tasks", href: "/worker", icon: ClipboardList },
@@ -23,24 +26,50 @@ const navItems = [
   { label: "Profile", href: "/worker/profile", icon: User },
 ];
 
-const taskHistory = [
-  { id: "TASK-012", title: "Install Suspension Springs", order: "PRD-004", date: "Dec 22, 2024", type: "task" },
-  { id: "QC-008", title: "QC Check - Transmission Unit", order: "PRD-002", date: "Dec 22, 2024", type: "qc" },
-  { id: "TASK-011", title: "Assemble Engine Block", order: "PRD-001", date: "Dec 21, 2024", type: "task" },
-  { id: "QC-007", title: "QC Check - Engine Assembly", order: "PRD-001", date: "Dec 21, 2024", type: "qc" },
-  { id: "TASK-010", title: "Package Brake Components", order: "PRD-003", date: "Dec 20, 2024", type: "task" },
-  { id: "TASK-009", title: "Quality Inspection", order: "PRD-002", date: "Dec 20, 2024", type: "task" },
-  { id: "QC-006", title: "QC Check - Brake System", order: "PRD-003", date: "Dec 19, 2024", type: "qc" },
-  { id: "TASK-008", title: "Machine Setup CNC-01", order: "PRD-001", date: "Dec 19, 2024", type: "task" },
-];
-
 const WorkerHistory: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, userRole, user } = useAuth();
+  const [taskHistory, setTaskHistory] = useState<
+    { id: string; title: string; order: string; date: string; type: "task" | "qc" }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
 
   const handleLogout = () => {
     sessionStorage.clear();
     navigate("/");
   };
+
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "worker") return;
+
+    const fetchHistory = async () => {
+      setLoading(true);
+      try {
+        const qcLogs = await apiFetch("/quality/logs").catch(() => []);
+        const myId = user?.id;
+        const relevant = (qcLogs || [])
+          .filter((log: any) => !myId || log.worker_id === myId)
+          .map((log: any) => ({
+            id: log.id,
+            title: `QC - ${log.product_name || "Order"}`,
+            order: log.production_order_id,
+            date: new Date(log.created_at).toLocaleDateString(),
+            type: "qc" as const,
+          }));
+        setTaskHistory(relevant);
+      } catch (err) {
+        if (err instanceof AuthError) {
+          toast({ title: err.message, variant: "destructive" });
+        } else {
+          toast({ title: "Failed to load history", variant: "destructive" });
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchHistory();
+  }, [isAuthenticated, userRole, user]);
 
   const getTypeIcon = (type: string) => {
     return type === "task" ? (
@@ -117,7 +146,7 @@ const WorkerHistory: React.FC = () => {
       <main className="relative pt-20 md:pt-24 pb-24 md:pb-12 px-4 md:px-8 max-w-2xl mx-auto">
         <div className="hidden md:block mb-8 animate-fade-in-up">
           <h1 className="text-3xl font-bold text-foreground">Work History</h1>
-          <p className="text-muted-foreground mt-1">Your completed tasks and QC logs</p>
+          <p className="text-muted-foreground mt-1">Your QC submissions and tasks</p>
         </div>
 
         {/* Summary */}
@@ -148,29 +177,45 @@ const WorkerHistory: React.FC = () => {
 
         {/* History List */}
         <div className="space-y-6">
-          {Object.entries(groupedHistory).map(([date, items], groupIndex) => (
-            <div key={date} className={cn("opacity-0 animate-fade-in-up", `stagger-${Math.min(groupIndex + 2, 5)}`)}>
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">{date}</h3>
-              <div className="space-y-2">
-                {items.map(item => (
-                  <GlassCard key={item.id} className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        {getTypeIcon(item.type)}
-                        <div>
-                          <p className="font-medium">{item.title}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {item.id} • Order: {item.order}
-                          </p>
+          {loading && (
+            <GlassCard>
+              <p className="text-muted-foreground">Loading history...</p>
+            </GlassCard>
+          )}
+
+          {!loading && Object.entries(groupedHistory).length === 0 && (
+            <GlassCard>
+              <p className="text-muted-foreground">No history yet.</p>
+            </GlassCard>
+          )}
+
+          {!loading &&
+            Object.entries(groupedHistory).map(([date, items], groupIndex) => (
+              <div
+                key={date}
+                className={cn("opacity-0 animate-fade-in-up", `stagger-${Math.min(groupIndex + 2, 5)}`)}
+              >
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">{date}</h3>
+                <div className="space-y-2">
+                  {items.map(item => (
+                    <GlassCard key={item.id} className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          {getTypeIcon(item.type)}
+                          <div>
+                            <p className="font-medium">{item.title}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {item.id} • Order: {item.order}
+                            </p>
+                          </div>
                         </div>
+                        {getTypeBadge(item.type)}
                       </div>
-                      {getTypeBadge(item.type)}
-                    </div>
-                  </GlassCard>
-                ))}
+                    </GlassCard>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       </main>
     </div>

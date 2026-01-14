@@ -79,15 +79,54 @@ const AdminDashboard: React.FC = () => {
           }))
         );
 
+        // Calculate Production Rate: SUM(quantity_completed) / SUM(quantity_target) × 100
+        const totalCompleted = (orders || []).reduce((sum: number, order: any) => {
+          return sum + (order.quantity_completed || 0);
+        }, 0);
+        const totalTarget = (orders || []).reduce((sum: number, order: any) => {
+          return sum + (order.quantity_target || 0);
+        }, 0);
+        const productionRate =
+          totalTarget > 0
+            ? Math.round((totalCompleted / totalTarget) * 100 * 100) / 100
+            : 0;
+
+        // Fetch QC logs for quality score calculation
+        const qcLogs = await apiFetch("/quality/logs").catch(() => []);
+        // Calculate Quality Score: 100 - average(actual_defect_percent)
+        let qualityScore = 100;
+        if (qcLogs && qcLogs.length > 0) {
+          const validLogs = qcLogs.filter(
+            (log: any) =>
+              log.actual_defect_percent !== null &&
+              log.actual_defect_percent !== undefined
+          );
+          if (validLogs.length > 0) {
+            const avgDefectPercent =
+              validLogs.reduce((sum: number, log: any) => {
+                return sum + (parseFloat(log.actual_defect_percent) || 0);
+              }, 0) / validLogs.length;
+            qualityScore = Math.max(
+              0,
+              Math.round((100 - avgDefectPercent) * 100) / 100
+            );
+          }
+        }
+
         // Fetch inventory
         const inventory = await apiFetch("/inventory").catch(() => []);
         const alerts = (inventory || [])
-          .filter((item: any) => item.status === "critical" || item.status === "low")
+          .filter((item: any) => {
+            const stock = item.current_stock || 0;
+            const threshold = item.reorder_threshold || 0;
+            return stock <= threshold;
+          })
           .map((item: any) => ({
             item: item.name,
-            stock: item.current_stock,
-            threshold: item.reorder_threshold,
-            urgency: item.status === "critical" ? "high" : item.status === "low" ? "medium" : "low",
+            stock: item.current_stock || 0,
+            threshold: item.reorder_threshold || 0,
+            urgency:
+              item.current_stock <= item.reorder_threshold * 0.5 ? "high" : "medium",
           }));
         setInventoryAlerts(alerts);
 
@@ -95,11 +134,11 @@ const AdminDashboard: React.FC = () => {
         const suggestions = await apiFetch("/ai/suggestions").catch(() => []);
         setAiSuggestions(Array.isArray(suggestions) ? suggestions : []);
 
-        // Calculate stats
+        // Calculate stats with real values
         setStats({
           activeOrders: orders?.length || 0,
-          productionRate: 94, // TODO: Calculate from actual data
-          qualityScore: 98.5, // TODO: Calculate from QC logs
+          productionRate,
+          qualityScore,
           inventoryAlerts: alerts.length,
         });
       } catch (err) {

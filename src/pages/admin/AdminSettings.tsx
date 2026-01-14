@@ -3,19 +3,18 @@ import SettingsLayout from "@/components/settings/SettingsLayout";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type MaterialMapping from "@/components/modals/ProductMaterialMappingModal";  
 import { Label } from "@/components/ui/label";
 import {
-    Settings,
-    Package,
-    Layers,
-    ShieldCheck,
-    Sparkles,
-    Key,
-    Plus,
-    Trash2,
-    Copy,
-    RefreshCw,
+  Settings,
+  Package,
+  Layers,
+  ShieldCheck,
+  Sparkles,
+  Key,
+  Plus,
+  Trash2,
+  Copy,
+  RefreshCw,
     Link2,
     ClipboardList,
     ChevronRight, // Added Badge import based on user usage
@@ -29,21 +28,21 @@ import AuthErrorDialog from "@/components/AuthErrorDialog";
 import { AddProductModal } from "@/components/modals/AddProductModal";
 import { AddMaterialModal } from "@/components/modals/AddMaterialModal";
 import type { ProductFormData } from "@/components/modals/AddProductModal";
-import { ProductMaterialMappingModal } from "@/components/modals/ProductMaterialMappingModal";
-import { ProductChecklistModal } from "@/components/modals/ProductChecklistModal";
+import { ProductMaterialMappingModal, type MaterialMapping } from "@/components/modals/ProductMaterialMappingModal";
+import { ProductChecklistModal, type ChecklistItem as ProductChecklistItem } from "@/components/modals/ProductChecklistModal";
 
 const sidebarItems = [
-    { id: "general", label: "General", icon: Settings },
-    { id: "products", label: "Products", icon: Package },
-    { id: "materials", label: "Materials", icon: Layers },
-    { id: "quality", label: "Quality Rules", icon: ShieldCheck },
-    { id: "ai", label: "AI & Optimization", icon: Sparkles },
-    { id: "access", label: "Access Codes", icon: Key },
+  { id: "general", label: "General", icon: Settings },
+  { id: "products", label: "Products", icon: Package },
+  { id: "materials", label: "Materials", icon: Layers },
+  { id: "quality", label: "Quality Rules", icon: ShieldCheck },
+  { id: "ai", label: "AI & Optimization", icon: Sparkles },
+  { id: "access", label: "Access Codes", icon: Key },
 ];
 
 interface Product {
-    id: string;
-    name: string;
+  id: string;
+  name: string;
     defect_rate: number;
     expected_defect_percent?: number;
     criticality_level?: "low" | "medium" | "high";
@@ -54,28 +53,23 @@ interface Product {
 }
 
 interface Material {
-    id: string;
-    name: string;
-    current_stock: number;
-    reorder_threshold: number;
-    supplier?: string;
+  id: string;
+  name: string;
+  current_stock: number;
+  reorder_threshold: number;
+  supplier?: string;
     unit?: string;
     quality_grade?: "A" | "B" | "C";
     lead_time_days?: number;
     status?: string;
 }
 
-interface ChecklistItem {
-    id: string;
-    text: string;
-    required?: boolean;
-}
 
 const AdminSettings: React.FC = () => {
     const { isAuthenticated, userRole } = useAuth();
     const [showAuthError, setShowAuthError] = useState(false);
     const [authError, setAuthError] = useState<string>("");
-    const [activeSection, setActiveSection] = useState("general");
+  const [activeSection, setActiveSection] = useState("general");
     const [projectId, setProjectId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -100,29 +94,29 @@ const AdminSettings: React.FC = () => {
         }
     }, [isAuthenticated, userRole]);
 
-    const [products, setProducts] = useState<Product[]>([]);
-    const [materials, setMaterials] = useState<Material[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
 
     // Removed redundant modal state variables that were present in earlier versions
     // const [showProductModal, setShowProductModal] = useState(false); 
     // const [showMaterialModal, setShowMaterialModal] = useState(false);
 
-    const [qualityRules, setQualityRules] = useState({
-        max_defect_percentage: 0,
-        qc_pass_score: 0,
-        rework_allowance: 0,
-    });
+  const [qualityRules, setQualityRules] = useState({
+    max_defect_percentage: 0,
+    qc_pass_score: 0,
+    rework_allowance: 0,
+  });
 
-    const [aiSettings, setAiSettings] = useState({
-        historical_defect_rate: 0,
-        safety_surplus: 0,
-        material_buffer: 0,
-    });
+  const [aiSettings, setAiSettings] = useState({
+    historical_defect_rate: 0,
+    safety_surplus: 0,
+    material_buffer: 0,
+  });
 
-    const [accessCodes, setAccessCodes] = useState({
-        project_code: "",
-        client_passcode: "",
-    });
+  const [accessCodes, setAccessCodes] = useState({
+    project_code: "",
+    client_passcode: "",
+  });
 
     /* -------------------- GET PROJECT ID -------------------- */
 
@@ -151,9 +145,9 @@ const AdminSettings: React.FC = () => {
         fetchProjectId();
     }, [isAuthenticated, userRole]);
 
-    /* -------------------- FETCH ON LOAD -------------------- */
+  /* -------------------- FETCH ON LOAD -------------------- */
 
-    useEffect(() => {
+  useEffect(() => {
         if (!projectId || !isAuthenticated || userRole !== "admin") return;
 
         const fetchData = async () => {
@@ -210,16 +204,16 @@ const AdminSettings: React.FC = () => {
         fetchData();
     }, [projectId, isAuthenticated, userRole]);
 
-    /* -------------------- PRODUCTS -------------------- */
+  /* -------------------- PRODUCTS -------------------- */
 
     const addProduct = async (productData: ProductFormData) => {
         if (!projectId) {
           toast({ title: "Project ID not available", variant: "destructive" });
           return;
         }
-      
-        const product = await apiFetch("/products", {
-          method: "POST",
+
+    const product = await apiFetch("/products", {
+      method: "POST",
           body: JSON.stringify({
             project_id: projectId,
             name: productData.name,
@@ -230,18 +224,18 @@ const AdminSettings: React.FC = () => {
             inspection_type: productData.inspection_type,
             quality_tolerance: productData.quality_tolerance,
           }),
-        });
-      
+    });
+
         setProducts((prev) => [...prev, product]);
         toast({ title: "Product added successfully" });
-      };
+  };
       
 
-    const deleteProduct = async (id: string) => {
+  const deleteProduct = async (id: string) => {
         try {
-            await apiFetch(`/products/${id}`, { method: "DELETE" });
-            setProducts((p) => p.filter((x) => x.id !== id));
-            toast({ title: "Product removed" });
+    await apiFetch(`/products/${id}`, { method: "DELETE" });
+    setProducts((p) => p.filter((x) => x.id !== id));
+    toast({ title: "Product removed" });
         } catch (err: any) {
             toast({ title: "Failed to delete product", description: err.message, variant: "destructive" });
         }
@@ -257,7 +251,7 @@ const AdminSettings: React.FC = () => {
         setShowChecklistModal(true);
     };
 
-    const handleSaveMaterialMappings = async (mappings: typeof MaterialMapping[]) => {
+    const handleSaveMaterialMappings = async (mappings: MaterialMapping[]) => {
         if (!selectedProduct || !projectId) return;
         try {
             await apiFetch(`/products/${selectedProduct.id}/materials`, {
@@ -273,7 +267,7 @@ const AdminSettings: React.FC = () => {
         }
     };
 
-    const handleSaveChecklist = async (checklist: ChecklistItem[]) => {
+    const handleSaveChecklist = async (checklist: ProductChecklistItem[]) => {
         if (!selectedProduct || !projectId) return;
 
         try {
@@ -289,95 +283,104 @@ const AdminSettings: React.FC = () => {
             toast({ title: "Checklist saved (Demo)", description: "Backend endpoint assumed" });
             setShowChecklistModal(false);
         }
-    };
+  };
 
-    /* -------------------- MATERIALS -------------------- */
+  /* -------------------- MATERIALS -------------------- */
 
     const addMaterial = async (materialData: {
         name: string;
+        unit: "kg" | "pcs" | "meters" | "liters";
         current_stock: number;
         reorder_threshold: number;
-        supplier?: string;
+        supplier: string;
+        quality_grade: "A" | "B" | "C";
+        lead_time_days: number;
     }) => {
         if (!projectId) {
             toast({ title: "Project ID not available", variant: "destructive" });
             return;
         }
         try {
-            const material = await apiFetch("/inventory", {
-                method: "POST",
-                body: JSON.stringify({
+    const material = await apiFetch("/inventory", {
+      method: "POST",
+      body: JSON.stringify({
                     project_id: projectId,
-                    ...materialData,
-                }),
-            });
+                    name: materialData.name,
+                    unit: materialData.unit,
+                    current_stock: materialData.current_stock,
+                    reorder_threshold: materialData.reorder_threshold,
+                    supplier_name: materialData.supplier,
+                    quality_grade: materialData.quality_grade,
+                    lead_time_days: materialData.lead_time_days,
+      }),
+    });
             setMaterials([...materials, material]);
-            toast({ title: "Material added" });
+    toast({ title: "Material added" });
         } catch (err: any) {
             toast({ title: "Failed to add material", description: err.message, variant: "destructive" });
         }
-    };
+  };
 
-    const deleteMaterial = async (id: string) => {
+  const deleteMaterial = async (id: string) => {
         try {
-            await apiFetch(`/inventory/${id}`, { method: "DELETE" });
+    await apiFetch(`/inventory/${id}`, { method: "DELETE" });
             setMaterials(materials.filter((m) => m.id !== id));
             toast({ title: "Material deleted" });
         } catch (err: any) {
             toast({ title: "Failed to delete material", description: err.message, variant: "destructive" });
         }
-    };
+  };
 
     /* -------------------- QUALITY & AI -------------------- */
 
-    const saveQualityRules = async () => {
+  const saveQualityRules = async () => {
         if (!projectId) return;
         try {
-            await apiFetch("/quality-rules", {
-                method: "POST",
+    await apiFetch("/quality-rules", {
+      method: "POST",
                 body: JSON.stringify({ ...qualityRules, project_id: projectId }),
-            });
-            toast({ title: "Quality rules saved" });
+    });
+    toast({ title: "Quality rules saved" });
         } catch (error) {
             toast({ title: "Failed to save quality rules", variant: "destructive" });
         }
-    };
+  };
 
-    const saveAISettings = async () => {
+  const saveAISettings = async () => {
         try {
-            await apiFetch("/ai/settings", {
-                method: "POST",
-                body: JSON.stringify(aiSettings),
-            });
-            toast({ title: "AI settings saved" });
+    await apiFetch("/ai/settings", {
+      method: "POST",
+      body: JSON.stringify(aiSettings),
+    });
+    toast({ title: "AI settings saved" });
         } catch (error) {
             toast({ title: "Failed to save AI settings", variant: "destructive" });
         }
-    };
+  };
 
-    /* -------------------- ACCESS CODES -------------------- */
+  /* -------------------- ACCESS CODES -------------------- */
 
-    const regenerateCode = async (type: "project" | "client") => {
+  const regenerateCode = async (type: "project" | "client") => {
         if (!projectId) return;
         try {
             // Notice: user code used `/access-codes/regenerate` with `project_id` in body
             // I'll stick to that but also pass `type` if the backend supports different codes
             const data = await apiFetch(`/access-codes/regenerate`, {
-                method: "POST",
+      method: "POST",
                 body: JSON.stringify({ project_id: projectId, type }),
-            });
+    });
 
             // Update state based on returned data structure
             if (data.project_code) setAccessCodes(prev => ({ ...prev, project_code: data.project_code }));
             if (data.client_passcode) setAccessCodes(prev => ({ ...prev, client_passcode: data.client_passcode }));
 
-            toast({ title: "Code regenerated" });
+    toast({ title: "Code regenerated" });
         } catch (error) {
             toast({ title: "Failed to regenerate code", variant: "destructive" });
         }
-    };
+  };
 
-    const disableAccess = async () => {
+  const disableAccess = async () => {
         if (!projectId) return;
         try {
             await apiFetch(`/access-codes/disable`, {
@@ -385,16 +388,16 @@ const AdminSettings: React.FC = () => {
                 body: JSON.stringify({ project_id: projectId }),
             });
             setAccessCodes({ project_code: "", client_passcode: "" });
-            toast({ title: "Access disabled" });
+    toast({ title: "Access disabled" });
         } catch {
             // Already handled
         }
-    };
+  };
 
-    const copy = (text: string) => {
-        navigator.clipboard.writeText(text);
-        toast({ title: "Copied" });
-    };
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied" });
+  };
 
     const getCriticalityBadge = (level?: string) => {
         switch (level) {
@@ -422,7 +425,7 @@ const AdminSettings: React.FC = () => {
         }
     };
 
-    /* -------------------- RENDER -------------------- */
+  /* -------------------- RENDER -------------------- */
 
     // Don't render content if not authenticated
     if (!isAuthenticated || userRole !== "admin") {
@@ -450,7 +453,7 @@ const AdminSettings: React.FC = () => {
         );
     }
 
-    return (
+  return (
         <>
             <AuthErrorDialog
                 open={showAuthError}
@@ -498,13 +501,13 @@ const AdminSettings: React.FC = () => {
                 </>
             )}
 
-            <SettingsLayout
-                sidebarItems={sidebarItems}
-                activeSection={activeSection}
-                onSectionChange={setActiveSection}
-                backPath="/admin"
-                title="Admin Settings"
-            >
+    <SettingsLayout
+      sidebarItems={sidebarItems}
+      activeSection={activeSection}
+      onSectionChange={setActiveSection}
+      backPath="/admin"
+      title="Admin Settings"
+    >
                 {loading && (
                     <GlassCard>
                         <p className="text-muted-foreground">Loading...</p>
@@ -551,11 +554,11 @@ const AdminSettings: React.FC = () => {
                 )}
 
                 {!loading && projectId && activeSection === "products" && (
-                    <div className="space-y-4">
+        <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <div>
+              <div>
                                 <h3 className="text-lg font-semibold">Products</h3>
-                                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                                     Define products with quality parameters for SPC analysis
                                 </p>
                             </div>
@@ -592,15 +595,15 @@ const AdminSettings: React.FC = () => {
                                                     )}
                                                 </div>
                                             )}
-                                        </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="text-destructive"
-                                            onClick={() => deleteProduct(p.id)}
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-destructive"
+                onClick={() => deleteProduct(p.id)}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
                                     </div>
 
                                     {/* Action buttons */}
@@ -626,14 +629,14 @@ const AdminSettings: React.FC = () => {
                                             <ChevronRight className="w-3 h-3" />
                                         </Button>
                                     </div>
-                                </GlassCard>
+            </GlassCard>
                             ))
                         )}
-                    </div>
-                )}
+        </div>
+      )}
 
                 {!loading && activeSection === "materials" && (
-                    <div className="space-y-4">
+        <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
                                 <h3 className="text-lg font-semibold">Material Inventory</h3>
@@ -642,8 +645,8 @@ const AdminSettings: React.FC = () => {
                                 </p>
                             </div>
                             <Button size="sm" onClick={() => setShowAddMaterialModal(true)} className="gap-2">
-                                <Plus className="w-4 h-4" /> Add Material
-                            </Button>
+            <Plus className="w-4 h-4" /> Add Material
+          </Button>
                         </div>
 
                         {materials.length === 0 ? (
@@ -652,143 +655,143 @@ const AdminSettings: React.FC = () => {
                             </GlassCard>
                         ) : (
                             materials.map((m) => (
-                                <GlassCard key={m.id} className="flex justify-between items-center">
-                                    <div>
+            <GlassCard key={m.id} className="flex justify-between items-center">
+              <div>
                                         <div className="flex items-center gap-2">
-                                            <p className="font-medium">{m.name}</p>
+                <p className="font-medium">{m.name}</p>
                                             {getGradeBadge(m.quality_grade)}
                                         </div>
-                                        <p className="text-sm text-muted-foreground">
-                                            Stock: {m.current_stock} | Threshold: {m.reorder_threshold}
-                                        </p>
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="text-destructive"
-                                        onClick={() => deleteMaterial(m.id)}
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                </GlassCard>
+                <p className="text-sm text-muted-foreground">
+                  Stock: {m.current_stock} | Threshold: {m.reorder_threshold}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-destructive"
+                onClick={() => deleteMaterial(m.id)}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </GlassCard>
                             ))
                         )}
-                    </div>
-                )}
+        </div>
+      )}
 
                 {!loading && activeSection === "quality" && (
-                    <GlassCard>
+        <GlassCard>
                         <h3 className="text-lg font-semibold mb-4">Quality Rules</h3>
                         <div className="space-y-4">
                             <div>
-                                <Label>Max Defect %</Label>
-                                <Input
+          <Label>Max Defect %</Label>
+          <Input
                                     type="number"
                                     className="mt-2"
-                                    value={qualityRules.max_defect_percentage}
-                                    onChange={(e) =>
-                                        setQualityRules((q) => ({
-                                            ...q,
-                                            max_defect_percentage: Number(e.target.value),
-                                        }))
-                                    }
-                                />
+            value={qualityRules.max_defect_percentage}
+            onChange={(e) =>
+              setQualityRules((q) => ({
+                ...q,
+                max_defect_percentage: Number(e.target.value),
+              }))
+            }
+          />
                                 <p className="text-xs text-muted-foreground mt-1">
                                     Maximum allowable defect percentage before triggering alerts
                                 </p>
                             </div>
                             <div>
                                 <Label>QC Pass Score</Label>
-                                <Input
+          <Input
                                     type="number"
                                     className="mt-2"
-                                    value={qualityRules.qc_pass_score}
-                                    onChange={(e) =>
-                                        setQualityRules((q) => ({
-                                            ...q,
-                                            qc_pass_score: Number(e.target.value),
-                                        }))
-                                    }
-                                />
+            value={qualityRules.qc_pass_score}
+            onChange={(e) =>
+              setQualityRules((q) => ({
+                ...q,
+                qc_pass_score: Number(e.target.value),
+              }))
+            }
+          />
                                 <p className="text-xs text-muted-foreground mt-1">
                                     Minimum quality score (0-100) required for a unit to pass QC
                                 </p>
                             </div>
                             <div>
                                 <Label>Rework Allowance</Label>
-                                <Input
+          <Input
                                     type="number"
                                     className="mt-2"
-                                    value={qualityRules.rework_allowance}
-                                    onChange={(e) =>
-                                        setQualityRules((q) => ({
-                                            ...q,
-                                            rework_allowance: Number(e.target.value),
-                                        }))
-                                    }
-                                />
+            value={qualityRules.rework_allowance}
+            onChange={(e) =>
+              setQualityRules((q) => ({
+                ...q,
+                rework_allowance: Number(e.target.value),
+              }))
+            }
+          />
                                 <p className="text-xs text-muted-foreground mt-1">
                                     Maximum number of rework attempts before rejection
                                 </p>
                             </div>
-                            <Button className="mt-4" onClick={saveQualityRules}>
-                                Save Quality Rules
-                            </Button>
+          <Button className="mt-4" onClick={saveQualityRules}>
+            Save Quality Rules
+          </Button>
                         </div>
-                    </GlassCard>
-                )}
+        </GlassCard>
+      )}
 
                 {!loading && activeSection === "ai" && (
-                    <GlassCard>
+        <GlassCard>
                         <h3 className="text-lg font-semibold mb-4">AI & Optimization</h3>
                         <div className="space-y-4">
                             <div>
                                 <Label>Historical Defect Rate (%)</Label>
-                                <Input
+          <Input
                                     type="number"
                                     className="mt-2"
-                                    value={aiSettings.historical_defect_rate}
-                                    onChange={(e) =>
-                                        setAiSettings((a) => ({
-                                            ...a,
-                                            historical_defect_rate: Number(e.target.value),
-                                        }))
-                                    }
-                                />
+            value={aiSettings.historical_defect_rate}
+            onChange={(e) =>
+              setAiSettings((a) => ({
+                ...a,
+                historical_defect_rate: Number(e.target.value),
+              }))
+            }
+          />
                                 <p className="text-xs text-muted-foreground mt-1">
                                     Used to predict expected defects and plan surplus production
                                 </p>
                             </div>
                             <div>
                                 <Label>Safety Surplus %</Label>
-                                <Input
+          <Input
                                     type="number"
                                     className="mt-2"
-                                    value={aiSettings.safety_surplus}
-                                    onChange={(e) =>
-                                        setAiSettings((a) => ({
-                                            ...a,
-                                            safety_surplus: Number(e.target.value),
-                                        }))
-                                    }
-                                />
+            value={aiSettings.safety_surplus}
+            onChange={(e) =>
+              setAiSettings((a) => ({
+                ...a,
+                safety_surplus: Number(e.target.value),
+              }))
+            }
+          />
                                 <p className="text-xs text-muted-foreground mt-1">
                                     Extra production percentage to account for defects
                                 </p>
                             </div>
                             <div>
                                 <Label>Material Buffer %</Label>
-                                <Input
+          <Input
                                     type="number"
                                     className="mt-2"
-                                    value={aiSettings.material_buffer}
-                                    onChange={(e) =>
-                                        setAiSettings((a) => ({
-                                            ...a,
-                                            material_buffer: Number(e.target.value),
-                                        }))
-                                    }
-                                />
+            value={aiSettings.material_buffer}
+            onChange={(e) =>
+              setAiSettings((a) => ({
+                ...a,
+                material_buffer: Number(e.target.value),
+              }))
+            }
+          />
                                 <p className="text-xs text-muted-foreground mt-1">
                                     Extra material to order beyond calculated requirements
                                 </p>
@@ -816,58 +819,58 @@ const AdminSettings: React.FC = () => {
                                 </p>
                             </div>
 
-                            <Button className="mt-4" onClick={saveAISettings}>
-                                Save AI Settings
-                            </Button>
+          <Button className="mt-4" onClick={saveAISettings}>
+            Save AI Settings
+          </Button>
                         </div>
-                    </GlassCard>
-                )}
+        </GlassCard>
+      )}
 
                 {!loading && activeSection === "access" && (
-                    <GlassCard>
+        <GlassCard>
                         <h3 className="text-lg font-semibold mb-4">Access Codes</h3>
                         <div className="space-y-6">
                             <div>
-                                <Label>Project Code</Label>
+          <Label>Project Code</Label>
                                 <div className="flex gap-2 mt-2">
                                     <Input value={accessCodes.project_code} readOnly className="font-mono" />
                                     <Button variant="outline" onClick={() => copy(accessCodes.project_code)}>
-                                        <Copy className="w-4 h-4" />
-                                    </Button>
+              <Copy className="w-4 h-4" />
+            </Button>
                                     <Button variant="outline" onClick={() => regenerateCode("project")}>
-                                        <RefreshCw className="w-4 h-4" />
-                                    </Button>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1">
                                     Share this code with workers to join the project
                                 </p>
-                            </div>
+          </div>
 
                             <div>
                                 <Label>Client Passcode</Label>
                                 <div className="flex gap-2 mt-2">
                                     <Input value={accessCodes.client_passcode} readOnly className="font-mono" />
                                     <Button variant="outline" onClick={() => copy(accessCodes.client_passcode)}>
-                                        <Copy className="w-4 h-4" />
-                                    </Button>
+              <Copy className="w-4 h-4" />
+            </Button>
                                     <Button variant="outline" onClick={() => regenerateCode("client")}>
-                                        <RefreshCw className="w-4 h-4" />
-                                    </Button>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1">
                                     Share this with clients to view delivery and quality reports
                                 </p>
-                            </div>
+          </div>
 
                             <Button variant="destructive" className="mt-4" onClick={disableAccess}>
-                                Disable All Access
-                            </Button>
+            Disable All Access
+          </Button>
                         </div>
-                    </GlassCard>
-                )}
-            </SettingsLayout>
+        </GlassCard>
+      )}
+    </SettingsLayout>
         </>
-    );
+  );
 };
 
 export default AdminSettings;

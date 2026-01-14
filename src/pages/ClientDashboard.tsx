@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import AuthErrorDialog from "@/components/AuthErrorDialog";
+import { apiFetch, AuthError } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
 const navItems = [
   { label: "Orders", href: "/client", icon: Package },
@@ -23,56 +25,17 @@ const navItems = [
   { label: "History", href: "/client/history", icon: Clock },
 ];
 
-const orders = [
-  {
-    id: "ORD-2024-001",
-    product: "Custom Engine Assembly x50",
-    status: "In Production",
-    progress: 75,
-    eta: "Dec 28, 2024",
-    stages: [
-      { name: "Order Placed", completed: true },
-      { name: "Materials Ready", completed: true },
-      { name: "In Production", completed: false, current: true },
-      { name: "Quality Check", completed: false },
-      { name: "Shipped", completed: false },
-    ],
-  },
-  {
-    id: "ORD-2024-002",
-    product: "Transmission Units x25",
-    status: "Quality Check",
-    progress: 90,
-    eta: "Dec 24, 2024",
-    stages: [
-      { name: "Order Placed", completed: true },
-      { name: "Materials Ready", completed: true },
-      { name: "In Production", completed: true },
-      { name: "Quality Check", completed: false, current: true },
-      { name: "Shipped", completed: false },
-    ],
-  },
-  {
-    id: "ORD-2024-003",
-    product: "Brake System Components x100",
-    status: "Pending",
-    progress: 15,
-    eta: "Jan 5, 2025",
-    stages: [
-      { name: "Order Placed", completed: true },
-      { name: "Materials Ready", completed: false, current: true },
-      { name: "In Production", completed: false },
-      { name: "Quality Check", completed: false },
-      { name: "Shipped", completed: false },
-    ],
-  },
-];
-
 const ClientDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, userRole } = useAuth();
   const [showAuthError, setShowAuthError] = useState(false);
   const [authError, setAuthError] = useState<string>("");
+  const [orders, setOrders] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    activeOrders: 0,
+    inTransit: 0,
+    completedThisMonth: 0,
+  });
 
   // Check authentication on mount
   useEffect(() => {
@@ -86,6 +49,67 @@ const ClientDashboard: React.FC = () => {
       setShowAuthError(true);
       return;
     }
+  }, [isAuthenticated, userRole]);
+
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "client") return;
+
+    const fetchData = async () => {
+      try {
+        const orderData = await apiFetch("/production/my").catch(() => []);
+        const mapped = (orderData || []).map((o: any) => {
+          const progress =
+            o.quantity_target && o.quantity_target > 0
+              ? Math.min(
+                  100,
+                  Math.round(((o.quantity_completed || 0) / o.quantity_target) * 100)
+                )
+              : 0;
+          return {
+            id: o.id,
+            product: o.product_name || "Production Order",
+            status: o.status || "pending",
+            progress,
+            eta: o.deadline ? new Date(o.deadline).toLocaleDateString() : "TBD",
+            completed_at: o.completed_at,
+            stages: [
+              { name: "Order Placed", completed: true },
+              { name: "Materials Ready", completed: true },
+              { name: "In Production", completed: o.status === "in-progress", current: o.status === "in-progress" },
+              { name: "Quality Check", completed: o.status === "completed", current: o.status === "qc" },
+              { name: "Shipped", completed: o.status === "shipped" },
+            ],
+          };
+        });
+        setOrders(mapped);
+
+        const now = new Date();
+        const thisMonth = now.getMonth();
+        const thisYear = now.getFullYear();
+        setStats({
+          activeOrders: mapped.filter((o: any) => o.status !== "completed").length,
+          inTransit: mapped.filter((o: any) => o.status === "shipped").length,
+          completedThisMonth: mapped.filter((o: any) => {
+            const completedAt = o.completed_at ? new Date(o.completed_at) : null;
+            return (
+              o.status === "completed" &&
+              completedAt &&
+              completedAt.getMonth() === thisMonth &&
+              completedAt.getFullYear() === thisYear
+            );
+          }).length,
+        });
+      } catch (err) {
+        if (err instanceof AuthError) {
+          setAuthError(err.message);
+          setShowAuthError(true);
+        } else {
+          toast({ title: "Failed to load client data", variant: "destructive" });
+        }
+      }
+    };
+
+    fetchData();
   }, [isAuthenticated, userRole]);
 
   const handleLogout = () => {
@@ -154,19 +178,19 @@ const ClientDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <StatCard
             title="Active Orders"
-            value="3"
+            value={stats.activeOrders.toString()}
             icon={Package}
             className="opacity-0 animate-fade-in-up stagger-1"
           />
           <StatCard
             title="In Transit"
-            value="1"
+            value={stats.inTransit.toString()}
             icon={Truck}
             className="opacity-0 animate-fade-in-up stagger-2"
           />
           <StatCard
             title="Completed This Month"
-            value="7"
+            value={stats.completedThisMonth.toString()}
             icon={CheckCircle}
             className="opacity-0 animate-fade-in-up stagger-3"
           />
@@ -186,10 +210,12 @@ const ClientDashboard: React.FC = () => {
                     <h3 className="text-lg font-semibold">{order.id}</h3>
                     <span
                       className={`text-xs px-3 py-1 rounded-full font-medium ${
-                        order.status === "In Production"
+                        order.status === "in-progress"
                           ? "bg-primary/20 text-primary"
-                          : order.status === "Quality Check"
+                          : order.status === "qc"
                           ? "bg-warning/20 text-warning"
+                          : order.status === "completed"
+                          ? "bg-success/20 text-success"
                           : "bg-muted text-muted-foreground"
                       }`}
                     >

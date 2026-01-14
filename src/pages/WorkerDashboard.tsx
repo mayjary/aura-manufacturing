@@ -21,6 +21,8 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import AuthErrorDialog from "@/components/AuthErrorDialog";
+import { apiFetch, AuthError } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
 const navItems = [
   { label: "Tasks", href: "/worker", icon: ClipboardList },
@@ -39,50 +41,13 @@ interface Task {
   machine?: string;
 }
 
-const initialTasks: Task[] = [
-  {
-    id: "TASK-001",
-    title: "Assemble Engine Block A-Series",
-    order: "PRD-001",
-    priority: "high",
-    status: "in-progress",
-    progress: 65,
-    machine: "CNC-01",
-  },
-  {
-    id: "TASK-002",
-    title: "Quality Check - Transmission Unit",
-    order: "PRD-002",
-    priority: "medium",
-    status: "pending",
-    progress: 0,
-    machine: "QC Station 3",
-  },
-  {
-    id: "TASK-003",
-    title: "Package Brake Components",
-    order: "PRD-003",
-    priority: "low",
-    status: "pending",
-    progress: 0,
-  },
-  {
-    id: "TASK-004",
-    title: "Install Suspension Springs",
-    order: "PRD-004",
-    priority: "medium",
-    status: "completed",
-    progress: 100,
-    machine: "Assembly Line B",
-  },
-];
-
 const WorkerDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, userRole } = useAuth();
   const [showAuthError, setShowAuthError] = useState(false);
   const [authError, setAuthError] = useState<string>("");
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Check authentication on mount
   useEffect(() => {
@@ -96,6 +61,56 @@ const WorkerDashboard: React.FC = () => {
       setShowAuthError(true);
       return;
     }
+  }, [isAuthenticated, userRole]);
+
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "worker") return;
+
+    const fetchTasks = async () => {
+      setLoading(true);
+      try {
+        const orders = await apiFetch("/production/my").catch(() => []);
+        const mapped: Task[] = (orders || []).map((order: any) => {
+          const progress =
+            order.quantity_target && order.quantity_target > 0
+              ? Math.min(
+                  100,
+                  Math.round(
+                    ((order.quantity_completed || 0) / order.quantity_target) * 100
+                  )
+                )
+              : 0;
+          const status: Task["status"] =
+            order.status === "completed"
+              ? "completed"
+              : order.status === "in-progress"
+              ? "in-progress"
+              : "pending";
+
+          return {
+            id: order.id,
+            title: order.product_name || "Production Order",
+            order: order.id,
+            priority: "medium",
+            status,
+            progress,
+            machine: order.machine || undefined,
+          };
+        });
+        setTasks(mapped);
+      } catch (err) {
+        if (err instanceof AuthError) {
+          setAuthError(err.message);
+          setShowAuthError(true);
+        } else {
+          toast({ title: "Failed to load tasks", variant: "destructive" });
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTasks();
   }, [isAuthenticated, userRole]);
 
   const handleLogout = () => {
@@ -261,113 +276,124 @@ const WorkerDashboard: React.FC = () => {
 
         {/* Tasks List */}
         <div className="space-y-4">
-          {tasks.map((task, index) => (
-            <GlassCard
-              key={task.id}
-              className={cn(
-                "opacity-0 animate-fade-in-up p-4 md:p-6",
-                `stagger-${Math.min(index + 2, 5)}`,
-                task.status === "completed" && "opacity-60"
-              )}
-            >
-              {/* Task Header */}
-              <div className="flex items-start justify-between gap-3 mb-3 md:mb-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <span className="text-xs text-muted-foreground">
-                      {task.id}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-xs px-2 py-0.5 rounded-full font-medium",
-                        getPriorityColor(task.priority)
-                      )}
-                    >
-                      {task.priority}
-                    </span>
-                  </div>
-                  <h3 className="text-base md:text-lg font-semibold text-foreground truncate">
-                    {task.title}
-                  </h3>
-                  <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
-                    <span>Order: {task.order}</span>
-                    {task.machine && <span>• {task.machine}</span>}
-                  </div>
-                </div>
-
-                {/* Status Badge */}
-                <div
-                  className={cn(
-                    "px-2 md:px-3 py-1 rounded-full text-xs font-medium shrink-0",
-                    task.status === "completed"
-                      ? "bg-success/20 text-success"
-                      : task.status === "in-progress"
-                      ? "bg-primary/20 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  {task.status === "in-progress"
-                    ? "Active"
-                    : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                </div>
-              </div>
-
-              {/* Progress */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="text-muted-foreground">Progress</span>
-                  <span className="font-medium text-foreground">{task.progress}%</span>
-                </div>
-                <Progress value={task.progress} className="h-2 md:h-3" />
-              </div>
-
-              {/* Actions - Large touch targets for mobile */}
-              <div className="flex flex-wrap gap-2 md:gap-3">
-                {task.status === "pending" && (
-                  <Button
-                    onClick={() => updateTaskStatus(task.id, "in-progress")}
-                    className="flex-1 h-12 gap-2 text-sm"
-                  >
-                    <Play className="w-4 h-4" />
-                    Start Task
-                  </Button>
-                )}
-
-                {task.status === "in-progress" && (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() => updateProgress(task.id, 10)}
-                      className="flex-1 h-12 text-sm"
-                    >
-                      +10%
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => updateProgress(task.id, 25)}
-                      className="flex-1 h-12 text-sm"
-                    >
-                      +25%
-                    </Button>
-                    <Button
-                      onClick={() => updateTaskStatus(task.id, "completed")}
-                      className="w-full md:flex-1 h-12 gap-2 text-sm bg-success hover:bg-success/90"
-                    >
-                      <Check className="w-4 h-4" />
-                      Complete
-                    </Button>
-                  </>
-                )}
-
-                {task.status === "completed" && (
-                  <div className="flex items-center gap-2 text-success">
-                    <CheckCircle2 className="w-5 h-5" />
-                    <span className="font-medium">Task Completed</span>
-                  </div>
-                )}
-              </div>
+          {loading && (
+            <GlassCard>
+              <p className="text-muted-foreground">Loading tasks...</p>
             </GlassCard>
-          ))}
+          )}
+
+          {!loading && tasks.length === 0 && (
+            <GlassCard>
+              <p className="text-muted-foreground">No assigned production orders yet.</p>
+            </GlassCard>
+          )}
+
+          {!loading &&
+            tasks.map((task, index) => (
+              <GlassCard
+                key={task.id}
+                className={cn(
+                  "opacity-0 animate-fade-in-up p-4 md:p-6",
+                  `stagger-${Math.min(index + 2, 5)}`,
+                  task.status === "completed" && "opacity-60"
+                )}
+              >
+                {/* Task Header */}
+                <div className="flex items-start justify-between gap-3 mb-3 md:mb-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="text-xs text-muted-foreground">{task.id}</span>
+                      <span
+                        className={cn(
+                          "text-xs px-2 py-0.5 rounded-full font-medium",
+                          getPriorityColor(task.priority)
+                        )}
+                      >
+                        {task.priority}
+                      </span>
+                    </div>
+                    <h3 className="text-base md:text-lg font-semibold text-foreground truncate">
+                      {task.title}
+                    </h3>
+                    <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
+                      <span>Order: {task.order}</span>
+                      {task.machine && <span>• {task.machine}</span>}
+                    </div>
+                  </div>
+
+                  {/* Status Badge */}
+                  <div
+                    className={cn(
+                      "px-2 md:px-3 py-1 rounded-full text-xs font-medium shrink-0",
+                      task.status === "completed"
+                        ? "bg-success/20 text-success"
+                        : task.status === "in-progress"
+                        ? "bg-primary/20 text-primary"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {task.status === "in-progress"
+                      ? "Active"
+                      : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                  </div>
+                </div>
+
+                {/* Progress */}
+                <div className="mb-4">
+                  <div className="flex items-center justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">Progress</span>
+                    <span className="font-medium text-foreground">{task.progress}%</span>
+                  </div>
+                  <Progress value={task.progress} className="h-2 md:h-3" />
+                </div>
+
+                {/* Actions - Large touch targets for mobile */}
+                <div className="flex flex-wrap gap-2 md:gap-3">
+                  {task.status === "pending" && (
+                    <Button
+                      onClick={() => updateTaskStatus(task.id, "in-progress")}
+                      className="flex-1 h-12 gap-2 text-sm"
+                    >
+                      <Play className="w-4 h-4" />
+                      Start Task
+                    </Button>
+                  )}
+
+                  {task.status === "in-progress" && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => updateProgress(task.id, 10)}
+                        className="flex-1 h-12 text-sm"
+                      >
+                        +10%
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => updateProgress(task.id, 25)}
+                        className="flex-1 h-12 text-sm"
+                      >
+                        +25%
+                      </Button>
+                      <Button
+                        onClick={() => updateTaskStatus(task.id, "completed")}
+                        className="w-full md:flex-1 h-12 gap-2 text-sm bg-success hover:bg-success/90"
+                      >
+                        <Check className="w-4 h-4" />
+                        Complete
+                      </Button>
+                    </>
+                  )}
+
+                  {task.status === "completed" && (
+                    <div className="flex items-center gap-2 text-success">
+                      <CheckCircle2 className="w-5 h-5" />
+                      <span className="font-medium">Task Completed</span>
+                    </div>
+                  )}
+                </div>
+              </GlassCard>
+            ))}
         </div>
 
         {/* Quick QC Log FAB - Mobile only */}
