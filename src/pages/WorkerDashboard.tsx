@@ -26,7 +26,7 @@ import { toast } from "@/hooks/use-toast";
 
 const navItems = [
   { label: "Tasks", href: "/worker", icon: ClipboardList },
-  { label: "QC Logs", href: "/worker/qc", icon: CheckCircle2 },
+  { label: "QC Logs", href: "/worker/qc-logs", icon: CheckCircle2 },
   { label: "History", href: "/worker/history", icon: Clock },
   { label: "Profile", href: "/worker/profile", icon: User },
 ];
