@@ -23,6 +23,7 @@ import { useNavigate } from "react-router-dom";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import AuthErrorDialog from "@/components/AuthErrorDialog";
+import { OperationsChatbot } from "@/components/chatbot/OperationsChatbot";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -47,7 +48,14 @@ const AdminDashboard: React.FC = () => {
     inventoryAlerts: 0,
   });
   const [loading, setLoading] = useState(true);
-
+  const [project_id, setProjectId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "admin") return;
+    const stored = localStorage.getItem("project_id");
+    if (stored) {
+      setProjectId(stored);
+    }
+  }, [isAuthenticated, userRole]);
   // Check authentication on mount
   useEffect(() => {
     if (isAuthenticated === false) {
@@ -396,6 +404,8 @@ const AdminDashboard: React.FC = () => {
               )}
             </div>
           </GlassCard>
+          <OperationsChatbot projectId={project_id} />
+
         </div>
       </main>
     </div>
