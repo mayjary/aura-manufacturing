@@ -75,38 +75,16 @@ const ClientDashboard: React.FC = () => {
               : 0;
           return {
             id: o.id,
-            product: o.product_name || "Production Order",
+            product: o.product_name || o.product || "Production Order",
             status: o.status || "pending",
+            quantity_target: o.quantity_target || 0,
+            quantity_completed: o.quantity_completed || 0,
             progress,
-            eta: o.deadline ? new Date(o.deadline).toLocaleDateString() : "TBD",
+            deadline: o.deadline,
             completed_at: o.completed_at,
-            stages: [
-              { name: "Order Placed", completed: true },
-              { name: "Materials Ready", completed: true },
-              { name: "In Production", completed: o.status === "in-progress", current: o.status === "in-progress" },
-              { name: "Quality Check", completed: o.status === "completed", current: o.status === "qc" },
-              { name: "Shipped", completed: o.status === "shipped" },
-            ],
           };
         });
         setOrders(mapped);
-
-        const now = new Date();
-        const thisMonth = now.getMonth();
-        const thisYear = now.getFullYear();
-        setStats({
-          activeOrders: mapped.filter((o: any) => o.status !== "completed").length,
-          inTransit: mapped.filter((o: any) => o.status === "shipped").length,
-          completedThisMonth: mapped.filter((o: any) => {
-            const completedAt = o.completed_at ? new Date(o.completed_at) : null;
-            return (
-              o.status === "completed" &&
-              completedAt &&
-              completedAt.getMonth() === thisMonth &&
-              completedAt.getFullYear() === thisYear
-            );
-          }).length,
-        });
       } catch (err) {
         if (err instanceof AuthError) {
           setAuthError(err.message);
