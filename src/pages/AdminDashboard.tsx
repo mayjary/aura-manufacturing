@@ -18,6 +18,7 @@ import {
   Sparkles,
   Download,
   Calendar,
+  Settings,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, AuthError } from "@/lib/api";
@@ -211,6 +212,14 @@ const AdminDashboard: React.FC = () => {
             <ThemeToggle />
             <Button
               variant="ghost"
+              size="icon"
+              onClick={() => navigate("/admin/settings")}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
               size="sm"
               onClick={handleLogout}
               className="text-muted-foreground hover:text-foreground"
@@ -359,7 +368,7 @@ const AdminDashboard: React.FC = () => {
               )}
             </div>
 
-            <Button variant="outline" className="w-full mt-4">
+            <Button variant="outline" className="w-full mt-4" onClick={() => navigate("/admin/inventory")}>
               View All Inventory
             </Button>
           </GlassCard>

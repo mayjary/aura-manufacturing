@@ -5,6 +5,20 @@ import { StatCard } from "@/components/ui/stat-card";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+} from "@/components/ui/chart";
+import {
   LayoutDashboard,
   Factory,
   Boxes,
@@ -17,6 +31,7 @@ import {
   CheckCircle,
   XCircle,
   Repeat,
+  BarChart3,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -24,6 +39,7 @@ import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import AuthErrorDialog from "@/components/AuthErrorDialog";
 import WorkerQualityTable from "@/components/WorkerQualityTable";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -61,6 +77,10 @@ const AdminQuality: React.FC = () => {
     defectRate: 0,
     reworkCount: 0,
   });
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [workerPerformanceData, setWorkerPerformanceData] = useState<any[]>([]);
+  const [productionOutputData, setProductionOutputData] = useState<any[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // Check authentication on mount
   useEffect(() => {
@@ -118,6 +138,35 @@ const AdminQuality: React.FC = () => {
     sessionStorage.clear();
     navigate("/");
   };
+
+  const fetchAnalytics = async () => {
+    if (!analyticsOpen) return;
+
+    setAnalyticsLoading(true);
+    try {
+      const [workerData, productionData] = await Promise.all([
+        apiFetch("/analytics/worker-performance"),
+        apiFetch("/analytics/production-output"),
+      ]);
+      setWorkerPerformanceData(workerData || []);
+      setProductionOutputData(productionData || []);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        setAuthError(err.message);
+        setShowAuthError(true);
+      } else {
+        console.error("Failed to fetch analytics", err);
+      }
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (analyticsOpen && isAuthenticated && userRole === "admin") {
+      fetchAnalytics();
+    }
+  }, [analyticsOpen, isAuthenticated, userRole]);
 
   const getStatusFromLog = (log: QCLog): string => {
     if (log.qc_status) {
@@ -226,9 +275,15 @@ const AdminQuality: React.FC = () => {
       />
 
       <main className="relative pt-24 pb-12 px-4 md:px-8 max-w-7xl mx-auto">
-        <div className="mb-8 animate-fade-in-up">
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Quality Control</h1>
-          <p className="text-muted-foreground mt-1">Monitor quality metrics and inspection results</p>
+        <div className="mb-8 animate-fade-in-up flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Quality Control</h1>
+            <p className="text-muted-foreground mt-1">Monitor quality metrics and inspection results</p>
+          </div>
+          <Button onClick={() => setAnalyticsOpen(true)} className="gap-2">
+            <BarChart3 className="w-4 h-4" />
+            View Analytics
+          </Button>
         </div>
 
         {/* Metrics Cards */}
@@ -361,6 +416,116 @@ const AdminQuality: React.FC = () => {
           <WorkerQualityTable />
         </div>
       </main>
+
+      {/* Analytics Modal */}
+      <Dialog open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Analytics Dashboard</DialogTitle>
+            <DialogDescription>
+              Compare worker performance and production output over the last 30 days
+            </DialogDescription>
+          </DialogHeader>
+
+          {analyticsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-muted-foreground">Loading analytics data...</p>
+            </div>
+          ) : (
+            <div className="space-y-8 mt-4">
+              {/* Worker Performance Chart */}
+              <GlassCard className="p-6">
+                <h3 className="text-lg font-semibold mb-4">Worker Performance</h3>
+                {workerPerformanceData.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No worker performance data available</p>
+                ) : (
+                  <ChartContainer
+                    config={{
+                      units: {
+                        label: "Units Completed",
+                        color: "hsl(var(--primary))",
+                      },
+                      score: {
+                        label: "Avg QC Score",
+                        color: "hsl(var(--success))",
+                      },
+                    }}
+                    className="h-[400px]"
+                  >
+                    <BarChart data={workerPerformanceData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="worker_username"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        fontSize={12}
+                      />
+                      <YAxis yAxisId="left" label={{ value: "Units Completed", angle: -90, position: "insideLeft" }} />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        label={{ value: "Avg QC Score", angle: 90, position: "insideRight" }}
+                        domain={[0, 100]}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      <Bar yAxisId="left" dataKey="total_units_completed" fill="hsl(var(--primary))" name="Units Completed" />
+                      <Bar yAxisId="right" dataKey="avg_worker_score" fill="hsl(var(--success))" name="Avg QC Score" />
+                    </BarChart>
+                  </ChartContainer>
+                )}
+              </GlassCard>
+
+              {/* Production Output Chart */}
+              <GlassCard className="p-6">
+                <h3 className="text-lg font-semibold mb-4">Production Output (Last 30 Days)</h3>
+                {productionOutputData.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No production output data available</p>
+                ) : (
+                  <ChartContainer
+                    config={{
+                      units: {
+                        label: "Units Produced",
+                        color: "hsl(var(--primary))",
+                      },
+                    }}
+                    className="h-[400px]"
+                  >
+                    <LineChart data={productionOutputData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="date"
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                        fontSize={12}
+                      />
+                      <YAxis label={{ value: "Units Produced", angle: -90, position: "insideLeft" }} />
+                      <ChartTooltip
+                        content={<ChartTooltipContent />}
+                        labelFormatter={(value) => {
+                          const date = new Date(value);
+                          return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="daily_units_produced"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        name="Units Produced"
+                      />
+                    </LineChart>
+                  </ChartContainer>
+                )}
+              </GlassCard>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
