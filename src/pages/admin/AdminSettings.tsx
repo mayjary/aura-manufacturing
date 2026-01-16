@@ -18,7 +18,9 @@ import {
     Link2,
     ClipboardList,
     ChevronRight, // Added Badge import based on user usage
+    Wrench,
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -35,6 +37,7 @@ const sidebarItems = [
   { id: "general", label: "General", icon: Settings },
   { id: "products", label: "Products", icon: Package },
   { id: "materials", label: "Materials", icon: Layers },
+  { id: "tasks", label: "Tasks", icon: ClipboardList },
   { id: "quality", label: "Quality Rules", icon: ShieldCheck },
   { id: "ai", label: "AI & Optimization", icon: Sparkles },
   { id: "access", label: "Access Codes", icon: Key },
@@ -118,6 +121,18 @@ const AdminSettings: React.FC = () => {
     client_passcode: "",
   });
 
+  // Tasks section state
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [workers, setWorkers] = useState<{ username: string; id: string }[]>([]);
+  const [productionOrders, setProductionOrders] = useState<any[]>([]);
+  const [taskForm, setTaskForm] = useState({
+    production_order_id: "",
+    worker_user_id: "",
+    task_name: "",
+    machine: "",
+    quantity_target: "",
+  });
+
     /* -------------------- GET PROJECT ID -------------------- */
 
     useEffect(() => {
@@ -189,6 +204,18 @@ const AdminSettings: React.FC = () => {
                         client_passcode: accessData.client_passcode || "",
                     });
                 }
+
+                // Fetch tasks
+                const tasksData = await apiFetch("/admin/tasks").catch(() => []);
+                setTasks(tasksData || []);
+
+                // Fetch workers
+                const workersData = await apiFetch("/admin/workers").catch(() => []);
+                setWorkers(workersData || []);
+
+                // Fetch production orders
+                const ordersData = await apiFetch("/production/list").catch(() => []);
+                setProductionOrders(ordersData || []);
             } catch (err) {
                 if (err instanceof AuthError) {
                     setAuthError(err.message);
@@ -632,6 +659,206 @@ const AdminSettings: React.FC = () => {
             </GlassCard>
                             ))
                         )}
+        </div>
+      )}
+
+                {!loading && activeSection === "tasks" && (
+        <div className="space-y-6">
+                        <div>
+                            <h3 className="text-lg font-semibold mb-2">Task Assignment</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
+                                Assign production tasks to workers
+                            </p>
+                        </div>
+
+                        {/* Task Creation Form */}
+                        <GlassCard>
+                            <h4 className="text-md font-semibold mb-4">Create New Task</h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <Label>Production Order</Label>
+                                    <Select
+                                        value={taskForm.production_order_id}
+                                        onValueChange={(value) =>
+                                            setTaskForm((f) => ({ ...f, production_order_id: value }))
+                                        }
+                                    >
+                                        <SelectTrigger className="mt-2">
+                                            <SelectValue placeholder="Select production order" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {productionOrders
+                                                .filter((po) => po.status !== "completed")
+                                                .map((po) => (
+                                                    <SelectItem key={po.id} value={po.id}>
+                                                        {po.product_name} - {po.quantity_target} units
+                                                        {po.status && ` (${po.status})`}
+                                                    </SelectItem>
+                                                ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div>
+                                    <Label>Worker</Label>
+                                    <Select
+                                        value={taskForm.worker_user_id}
+                                        onValueChange={(value) =>
+                                            setTaskForm((f) => ({ ...f, worker_user_id: value }))
+                                        }
+                                    >
+                                        <SelectTrigger className="mt-2">
+                                            <SelectValue placeholder="Select worker" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {workers.map((worker) => (
+                                                <SelectItem key={worker.id} value={worker.username}>
+                                                    {worker.username}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div>
+                                    <Label>Task Name</Label>
+                                    <Input
+                                        className="mt-2"
+                                        placeholder="e.g., Assembly, Quality Check"
+                                        value={taskForm.task_name}
+                                        onChange={(e) =>
+                                            setTaskForm((f) => ({ ...f, task_name: e.target.value }))
+                                        }
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label>Machine (Optional)</Label>
+                                    <Input
+                                        className="mt-2"
+                                        placeholder="e.g., Machine A, Line 1"
+                                        value={taskForm.machine}
+                                        onChange={(e) =>
+                                            setTaskForm((f) => ({ ...f, machine: e.target.value }))
+                                        }
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label>Quantity Target</Label>
+                                    <Input
+                                        type="number"
+                                        className="mt-2"
+                                        placeholder="Enter target quantity"
+                                        value={taskForm.quantity_target}
+                                        onChange={(e) =>
+                                            setTaskForm((f) => ({ ...f, quantity_target: e.target.value }))
+                                        }
+                                    />
+                                </div>
+
+                                <Button
+                                    className="w-full"
+                                    onClick={async () => {
+                                        if (
+                                            !taskForm.production_order_id ||
+                                            !taskForm.worker_user_id ||
+                                            !taskForm.task_name ||
+                                            !taskForm.quantity_target
+                                        ) {
+                                            toast({
+                                                title: "Please fill all required fields",
+                                                variant: "destructive",
+                                            });
+                                            return;
+                                        }
+
+                                        try {
+                                            await apiFetch("/admin/tasks", {
+                                                method: "POST",
+                                                body: JSON.stringify({
+                                                    production_order_id: taskForm.production_order_id,
+                                                    worker_user_id: taskForm.worker_user_id,
+                                                    task_name: taskForm.task_name,
+                                                    machine: taskForm.machine || null,
+                                                    quantity_target: parseInt(taskForm.quantity_target),
+                                                }),
+                                            });
+
+                                            toast({ title: "Task created successfully" });
+                                            setTaskForm({
+                                                production_order_id: "",
+                                                worker_user_id: "",
+                                                task_name: "",
+                                                machine: "",
+                                                quantity_target: "",
+                                            });
+
+                                            // Refresh tasks list
+                                            const tasksData = await apiFetch("/admin/tasks").catch(() => []);
+                                            setTasks(tasksData || []);
+                                        } catch (err: any) {
+                                            toast({
+                                                title: "Failed to create task",
+                                                description: err.message,
+                                                variant: "destructive",
+                                            });
+                                        }
+                                    }}
+                                >
+                                    Create Task
+                                </Button>
+                            </div>
+                        </GlassCard>
+
+                        {/* Tasks List */}
+                        <div>
+                            <h4 className="text-md font-semibold mb-4">All Tasks</h4>
+                            {tasks.length === 0 ? (
+                                <GlassCard>
+                                    <p className="text-muted-foreground">No tasks created yet.</p>
+                                </GlassCard>
+                            ) : (
+                                <div className="space-y-3">
+                                    {tasks.map((task) => (
+                                        <GlassCard key={task.id} className="p-4">
+                                            <div className="flex justify-between items-start">
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-medium">{task.task_name}</p>
+                                                        <Badge
+                                                            variant={
+                                                                task.status === "completed"
+                                                                    ? "default"
+                                                                    : task.status === "in-progress"
+                                                                    ? "secondary"
+                                                                    : "outline"
+                                                            }
+                                                        >
+                                                            {task.status}
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Product: {task.product_name}
+                                                    </p>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Worker: {task.worker_username || "Unassigned"}
+                                                    </p>
+                                                    {task.machine && (
+                                                        <p className="text-sm text-muted-foreground">
+                                                            Machine: {task.machine}
+                                                        </p>
+                                                    )}
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Progress: {task.quantity_completed || 0} / {task.quantity_target}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </GlassCard>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
         </div>
       )}
 

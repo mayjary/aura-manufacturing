@@ -69,32 +69,32 @@ const WorkerDashboard: React.FC = () => {
     const fetchTasks = async () => {
       setLoading(true);
       try {
-        const orders = await apiFetch("/production/my").catch(() => []);
-        const mapped: Task[] = (orders || []).map((order: any) => {
+        const tasksData = await apiFetch("/worker/tasks").catch(() => []);
+        const mapped: Task[] = (tasksData || []).map((task: any) => {
           const progress =
-            order.quantity_target && order.quantity_target > 0
+            task.quantity_target && task.quantity_target > 0
               ? Math.min(
                   100,
                   Math.round(
-                    ((order.quantity_completed || 0) / order.quantity_target) * 100
+                    ((task.quantity_completed || 0) / task.quantity_target) * 100
                   )
                 )
               : 0;
           const status: Task["status"] =
-            order.status === "completed"
+            task.status === "completed"
               ? "completed"
-              : order.status === "in-progress"
+              : task.status === "in-progress"
               ? "in-progress"
               : "pending";
 
           return {
-            id: order.id,
-            title: order.product_name || "Production Order",
-            order: order.id,
+            id: task.id,
+            title: task.task_name || task.product_name || "Task",
+            order: task.production_order_id,
             priority: "medium",
             status,
             progress,
-            machine: order.machine || undefined,
+            machine: task.machine || undefined,
           };
         });
         setTasks(mapped);
@@ -137,36 +137,87 @@ const WorkerDashboard: React.FC = () => {
     );
   }
 
-  const updateTaskStatus = (taskId: string, newStatus: Task["status"]) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              status: newStatus,
-              progress:
-                newStatus === "completed"
-                  ? 100
-                  : newStatus === "in-progress"
-                  ? Math.max(task.progress, 10)
-                  : task.progress,
-            }
-          : task
-      )
-    );
+  const updateTaskStatus = async (taskId: string, newStatus: Task["status"]) => {
+    try {
+      if (newStatus === "in-progress") {
+        await apiFetch(`/worker/tasks/${taskId}/start`, { method: "PATCH" });
+        toast({ title: "Task started" });
+      }
+      // Refresh tasks from backend
+      const tasksData = await apiFetch("/worker/tasks").catch(() => []);
+      const mapped: Task[] = (tasksData || []).map((task: any) => {
+        const progress =
+          task.quantity_target && task.quantity_target > 0
+            ? Math.min(
+                100,
+                Math.round(
+                  ((task.quantity_completed || 0) / task.quantity_target) * 100
+                )
+              )
+            : 0;
+        const status: Task["status"] =
+          task.status === "completed"
+            ? "completed"
+            : task.status === "in-progress"
+            ? "in-progress"
+            : "pending";
+
+        return {
+          id: task.id,
+          title: task.task_name || task.product_name || "Task",
+          order: task.production_order_id,
+          priority: "medium",
+          status,
+          progress,
+          machine: task.machine || undefined,
+        };
+      });
+      setTasks(mapped);
+    } catch (err: any) {
+      toast({ title: "Failed to update task", description: err.message, variant: "destructive" });
+    }
   };
 
-  const updateProgress = (taskId: string, increment: number) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              progress: Math.min(100, Math.max(0, task.progress + increment)),
-            }
-          : task
-      )
-    );
+  const updateProgress = async (taskId: string, increment: number) => {
+    try {
+      await apiFetch(`/worker/tasks/${taskId}/progress`, {
+        method: "PATCH",
+        body: JSON.stringify({ increment }),
+      });
+      toast({ title: "Progress updated" });
+      // Refresh tasks from backend
+      const tasksData = await apiFetch("/worker/tasks").catch(() => []);
+      const mapped: Task[] = (tasksData || []).map((task: any) => {
+        const progress =
+          task.quantity_target && task.quantity_target > 0
+            ? Math.min(
+                100,
+                Math.round(
+                  ((task.quantity_completed || 0) / task.quantity_target) * 100
+                )
+              )
+            : 0;
+        const status: Task["status"] =
+          task.status === "completed"
+            ? "completed"
+            : task.status === "in-progress"
+            ? "in-progress"
+            : "pending";
+
+        return {
+          id: task.id,
+          title: task.task_name || task.product_name || "Task",
+          order: task.production_order_id,
+          priority: "medium",
+          status,
+          progress,
+          machine: task.machine || undefined,
+        };
+      });
+      setTasks(mapped);
+    } catch (err: any) {
+      toast({ title: "Failed to update progress", description: err.message, variant: "destructive" });
+    }
   };
 
   const completedCount = tasks.filter((t) => t.status === "completed").length;
@@ -366,21 +417,14 @@ const WorkerDashboard: React.FC = () => {
                         onClick={() => updateProgress(task.id, 10)}
                         className="flex-1 h-12 text-sm"
                       >
-                        +10%
+                        +10 Units
                       </Button>
                       <Button
                         variant="outline"
                         onClick={() => updateProgress(task.id, 25)}
                         className="flex-1 h-12 text-sm"
                       >
-                        +25%
-                      </Button>
-                      <Button
-                        onClick={() => updateTaskStatus(task.id, "completed")}
-                        className="w-full md:flex-1 h-12 gap-2 text-sm bg-success hover:bg-success/90"
-                      >
-                        <Check className="w-4 h-4" />
-                        Complete
+                        +25 Units
                       </Button>
                     </>
                   )}

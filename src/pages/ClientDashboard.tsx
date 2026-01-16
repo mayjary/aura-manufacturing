@@ -56,7 +56,7 @@ const ClientDashboard: React.FC = () => {
 
     const fetchData = async () => {
       try {
-        const orderData = await apiFetch("/production/my").catch(() => []);
+        const orderData = await apiFetch("/client/orders").catch(() => []);
         const mapped = (orderData || []).map((o: any) => {
           const progress =
             o.quantity_target && o.quantity_target > 0
