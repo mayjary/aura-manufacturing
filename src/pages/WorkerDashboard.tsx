@@ -49,8 +49,6 @@ const WorkerDashboard: React.FC = () => {
   const [authError, setAuthError] = useState<string>("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Check authentication on mount
   useEffect(() => {
@@ -319,124 +317,108 @@ const WorkerDashboard: React.FC = () => {
           <div className="space-y-4">
             {tasks.map((task, index) => (
               <GlassCard
-                key={task.id}
-                className={cn(
-                  "opacity-0 animate-fade-in-up p-4 md:p-6",
-                  `stagger-${Math.min(index + 2, 5)}`,
-                  task.status === "completed" && "opacity-60"
+              key={task.id}
+              className={cn(
+                "opacity-0 animate-fade-in-up p-4 md:p-6",
+                `stagger-${Math.min(index + 2, 5)}`,
+                task.status === "completed" && "opacity-60"
+              )}
+            >
+              {/* Task Header */}
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs text-muted-foreground">
+                    {task.id.slice(0, 8)}
+                  </span>
+            
+                  <h3 className="text-base md:text-lg font-semibold truncate">
+                    {task.task_name}
+                  </h3>
+            
+                  <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
+                    {task.product_name && <span>{task.product_name}</span>}
+                    {task.machine && <span>• {task.machine}</span>}
+                    <span>• Target: {task.quantity_target}</span>
+                  </div>
+                </div>
+            
+                {/* Status Badge */}
+                <div
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium",
+                    task.status === "completed"
+                      ? "bg-success/20 text-success"
+                      : task.status === "in-progress"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {task.status === "in-progress"
+                    ? "Active"
+                    : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                </div>
+              </div>
+            
+              {/* Progress */}
+              <div className="mb-4">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-muted-foreground">Progress</span>
+                  <span className="font-medium">
+                    {task.quantity_completed} / {task.quantity_target} ({task.progress}%)
+                  </span>
+                </div>
+                <Progress value={task.progress} className="h-2 md:h-3" />
+              </div>
+            
+              {/* Actions */}
+              <div className="flex flex-wrap gap-2">
+                {task.status === "pending" && (
+                  <Button
+                    onClick={() => handleStartTask(task.id)}
+                    className="flex-1 h-12 gap-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    Start Task
+                  </Button>
                 )}
-              >
-                {/* Task Header */}
-                <div className="flex items-start justify-between gap-3 mb-3 md:mb-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="text-xs text-muted-foreground">
-                        {task.id.slice(0, 8)}
-                      </span>
-                    </div>
-                    <h3 className="text-base md:text-lg font-semibold text-foreground truncate">
-                      {task.task_name}
-                    </h3>
-                    <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
-                      {task.product_name && <span>{task.product_name}</span>}
-                      {task.machine && <span>• {task.machine}</span>}
-                      <span>• Target: {task.quantity_target}</span>
-                    </div>
-                  </div>
-
-                  {/* Status Badge */}
-                  <div
-                    className={cn(
-                      "px-2 md:px-3 py-1 rounded-full text-xs font-medium shrink-0",
-                      task.status === "completed"
-                        ? "bg-success/20 text-success"
-                        : task.status === "in-progress"
-                        ? "bg-primary/20 text-primary"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {task.status === "in-progress"
-                      ? "Active"
-                      : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                  </div>
-                </div>
-                  {/* Status Badge */}
-                  <div
-                    className={cn(
-                      "px-2 md:px-3 py-1 rounded-full text-xs font-medium shrink-0",
-                      task.status === "completed"
-                        ? "bg-success/20 text-success"
-                        : task.status === "in-progress"
-                        ? "bg-primary/20 text-primary"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {task.status === "in-progress"
-                      ? "Active"
-                      : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                  </div>
-                </div>
-
-                {/* Progress */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between text-sm mb-2">
-                    <span className="text-muted-foreground">Progress</span>
-                    <span className="font-medium text-foreground">
-                      {task.quantity_completed} / {task.quantity_target} ({task.progress}%)
-                    </span>
-                  </div>
-                  <Progress value={task.progress} className="h-2 md:h-3" />
-                </div>
-
-                {/* Actions - Large touch targets for mobile */}
-                <div className="flex flex-wrap gap-2 md:gap-3">
-                  {task.status === "pending" && (
+            
+                {task.status === "in-progress" && (
+                  <>
                     <Button
-                      onClick={() => handleStartTask(task.id)}
-                      className="flex-1 h-12 gap-2 text-sm"
+                      variant="outline"
+                      onClick={() => handleUpdateProgress(task.id, 10)}
+                      className="flex-1 h-12"
                     >
-                      <Play className="w-4 h-4" />
-                      Start Task
+                      +10%
                     </Button>
-                  )}
-
-                  {task.status === "in-progress" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleUpdateProgress(task.id, 10)}
-                        className="flex-1 h-12 text-sm"
-                        disabled={task.progress >= 100}
-                      >
-                        +10%
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleUpdateProgress(task.id, 25)}
-                        className="flex-1 h-12 text-sm"
-                        disabled={task.progress >= 100}
-                      >
-                        +25%
-                      </Button>
-                      <Button
-                        onClick={() => handleCompleteTask(task.id)}
-                        className="w-full md:flex-1 h-12 gap-2 text-sm bg-success hover:bg-success/90"
-                        disabled={task.progress >= 100}
-                      >
-                        <Check className="w-4 h-4" />
-                        Complete
-                      </Button>
-                    </>
-                  )}
-
-                  {task.status === "completed" && (
-                    <div className="flex items-center gap-2 text-success">
-                      <CheckCircle2 className="w-5 h-5" />
-                      <span className="font-medium">Task Completed</span>
-                    </div>
-                  )}
-                </div>
-              </GlassCard>
+            
+                    <Button
+                      variant="outline"
+                      onClick={() => handleUpdateProgress(task.id, 25)}
+                      className="flex-1 h-12"
+                    >
+                      +25%
+                    </Button>
+            
+                    <Button
+                      onClick={() => handleCompleteTask(task.id)}
+                      className="w-full h-12 gap-2 bg-success hover:bg-success/90"
+                    >
+                      <Check className="w-4 h-4" />
+                      Complete
+                    </Button>
+                  </>
+                )}
+            
+                {task.status === "completed" && (
+                  <div className="flex items-center gap-2 text-success">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span className="font-medium">Task Completed</span>
+                  </div>
+                )}
+              </div>
+            </GlassCard>
+            
             ))}
           </div>
         )}
