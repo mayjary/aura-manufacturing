@@ -25,7 +25,7 @@ import { apiFetch, AuthError } from "@/lib/api";
 
 const navItems = [
   { label: "Tasks", href: "/worker", icon: ClipboardList },
-  { label: "QC Logs", href: "/worker/qc", icon: CheckCircle2 },
+  { label: "QC Logs", href: "/worker/qc-logs", icon: CheckCircle2 },
   { label: "History", href: "/worker/history", icon: Clock },
   { label: "Profile", href: "/worker/profile", icon: User },
 ];
@@ -47,6 +47,8 @@ const WorkerDashboard: React.FC = () => {
   const { isAuthenticated, userRole } = useAuth();
   const [showAuthError, setShowAuthError] = useState(false);
   const [authError, setAuthError] = useState<string>("");
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -342,6 +344,22 @@ const WorkerDashboard: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Status Badge */}
+                  <div
+                    className={cn(
+                      "px-2 md:px-3 py-1 rounded-full text-xs font-medium shrink-0",
+                      task.status === "completed"
+                        ? "bg-success/20 text-success"
+                        : task.status === "in-progress"
+                        ? "bg-primary/20 text-primary"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {task.status === "in-progress"
+                      ? "Active"
+                      : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                  </div>
+                </div>
                   {/* Status Badge */}
                   <div
                     className={cn(

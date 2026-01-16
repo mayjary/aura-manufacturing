@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { BottomNav } from "@/components/ui/bottom-nav";
 import { FloatingNav } from "@/components/ui/floating-nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, AuthError } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
 
 const navItems = [
   { label: "Tasks", href: "/worker", icon: ClipboardList },
@@ -28,32 +29,57 @@ const navItems = [
   { label: "Profile", href: "/worker/profile", icon: User },
 ];
 
-const orders = [
-  { id: "PRD-001", name: "Engine Assembly A-Series" },
-  { id: "PRD-002", name: "Transmission Unit T-200" },
-  { id: "PRD-003", name: "Brake System Components" },
-  { id: "PRD-004", name: "Suspension Kit SK-Pro" },
-];
-
-const qcChecklist = [
-  { id: "visual", label: "Visual inspection passed" },
-  { id: "dimensions", label: "Dimensions within tolerance" },
-  { id: "function", label: "Functional test passed" },
-  { id: "finish", label: "Surface finish acceptable" },
-  { id: "packaging", label: "Packaging requirements met" },
-];
-
 const WorkerQCLogs: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, userRole } = useAuth();
   const [selectedOrder, setSelectedOrder] = useState("");
   const [defectCount, setDefectCount] = useState("");
   const [notes, setNotes] = useState("");
   const [checkedItems, setCheckedItems] = useState<string[]>([]);
+  const [orders, setOrders] = useState<{ id: string; name: string }[]>([]);
+  const [checklist, setChecklist] = useState<{ id: string; label: string }[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const handleLogout = () => {
     sessionStorage.clear();
     navigate("/");
   };
+
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "worker") return;
+
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const orderData = await apiFetch("/production/my").catch(() => []);
+        setOrders(
+          (orderData || []).map((o: any) => ({
+            id: o.id,
+            name: o.product_name || "Production Order",
+          }))
+        );
+
+        // Checklist: if backend product checklist available in future, fetch it. For now, use default research-backed checks.
+        setChecklist([
+          { id: "visual", label: "Visual inspection passed" },
+          { id: "dimensions", label: "Dimensions within tolerance" },
+          { id: "function", label: "Functional test passed" },
+          { id: "finish", label: "Surface finish acceptable" },
+          { id: "packaging", label: "Packaging requirements met" },
+        ]);
+      } catch (err) {
+        if (err instanceof AuthError) {
+          toast({ title: err.message, variant: "destructive" });
+        } else {
+          toast({ title: "Failed to load QC data", variant: "destructive" });
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [isAuthenticated, userRole]);
 
   const handleCheckItem = (itemId: string, checked: boolean) => {
     if (checked) {
@@ -76,7 +102,7 @@ const handleSubmit = async () => {
   }
 
   try {
-    await apiFetch("/qc/submit", {
+    await apiFetch("/quality/submit", {
       method: "POST",
       body: JSON.stringify({
         production_order_id: selectedOrder,
@@ -162,9 +188,13 @@ const handleSubmit = async () => {
             {/* Order Selection */}
             <div>
               <Label className="text-base font-medium">Select Order</Label>
-              <Select value={selectedOrder} onValueChange={setSelectedOrder}>
+                <Select
+                  value={selectedOrder}
+                  onValueChange={setSelectedOrder}
+                  disabled={loading || orders.length === 0}
+                >
                 <SelectTrigger className="mt-2 h-12">
-                  <SelectValue placeholder="Choose an order..." />
+                  <SelectValue placeholder={loading ? "Loading..." : "Choose an order..."} />
                 </SelectTrigger>
                 <SelectContent>
                   {orders.map(order => (
@@ -180,7 +210,7 @@ const handleSubmit = async () => {
             <div>
               <Label className="text-base font-medium mb-3 block">QC Checklist</Label>
               <div className="space-y-3">
-                {qcChecklist.map(item => (
+                {checklist.map(item => (
                   <div
                     key={item.id}
                     className="flex items-center gap-3 p-3 rounded-xl bg-secondary/20"

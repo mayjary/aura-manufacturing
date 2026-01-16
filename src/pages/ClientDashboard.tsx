@@ -17,6 +17,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import AuthErrorDialog from "@/components/AuthErrorDialog";
 import { apiFetch, AuthError } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
+import { apiFetch, AuthError } from "@/lib/api";
 
 const navItems = [
   { label: "Orders", href: "/client", icon: Package },
