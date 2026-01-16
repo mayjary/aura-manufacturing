@@ -25,17 +25,24 @@ const navItems = [
   { label: "History", href: "/client/history", icon: Clock },
 ];
 
+interface Order {
+  id: string;
+  product: string;
+  status: string;
+  quantity_target: number;
+  quantity_completed: number;
+  progress: number;
+  deadline?: string;
+  completed_at?: string;
+}
+
 const ClientDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, userRole } = useAuth();
   const [showAuthError, setShowAuthError] = useState(false);
   const [authError, setAuthError] = useState<string>("");
-  const [orders, setOrders] = useState<any[]>([]);
-  const [stats, setStats] = useState({
-    activeOrders: 0,
-    inTransit: 0,
-    completedThisMonth: 0,
-  });
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Check authentication on mount
   useEffect(() => {
@@ -51,12 +58,13 @@ const ClientDashboard: React.FC = () => {
     }
   }, [isAuthenticated, userRole]);
 
+  // Fetch orders from API
   useEffect(() => {
     if (!isAuthenticated || userRole !== "client") return;
 
-    const fetchData = async () => {
+    const fetchOrders = async () => {
       try {
-        const orderData = await apiFetch("/client/orders").catch(() => []);
+        const orderData = await apiFetch("/production/my").catch(() => []);
         const mapped = (orderData || []).map((o: any) => {
           const progress =
             o.quantity_target && o.quantity_target > 0
@@ -104,18 +112,42 @@ const ClientDashboard: React.FC = () => {
           setAuthError(err.message);
           setShowAuthError(true);
         } else {
-          toast({ title: "Failed to load client data", variant: "destructive" });
+          console.error("Failed to fetch orders", err);
         }
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchData();
+    fetchOrders();
   }, [isAuthenticated, userRole]);
 
   const handleLogout = () => {
     sessionStorage.clear();
     localStorage.clear();
     navigate("/");
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const getStatusDisplay = (status: string) => {
+    switch (status) {
+      case "in-progress":
+        return "In Production";
+      case "pending":
+        return "Pending";
+      case "completed":
+        return "Completed";
+      default:
+        return status;
+    }
   };
 
   // Don't render content if not authenticated
@@ -178,107 +210,83 @@ const ClientDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <StatCard
             title="Active Orders"
-            value={stats.activeOrders.toString()}
+            value={orders.filter((o) => o.status !== "completed").length.toString()}
             icon={Package}
             className="opacity-0 animate-fade-in-up stagger-1"
           />
           <StatCard
-            title="In Transit"
-            value={stats.inTransit.toString()}
+            title="In Production"
+            value={orders.filter((o) => o.status === "in-progress").length.toString()}
             icon={Truck}
             className="opacity-0 animate-fade-in-up stagger-2"
           />
           <StatCard
-            title="Completed This Month"
-            value={stats.completedThisMonth.toString()}
+            title="Completed"
+            value={orders.filter((o) => o.status === "completed").length.toString()}
             icon={CheckCircle}
             className="opacity-0 animate-fade-in-up stagger-3"
           />
         </div>
 
         {/* Orders List */}
-        <div className="space-y-6">
-          {orders.map((order, index) => (
-            <GlassCard
-              key={order.id}
-              className={`opacity-0 animate-fade-in-up stagger-${index + 2}`}
-            >
-              {/* Order Header */}
-              <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="text-lg font-semibold">{order.id}</h3>
-                    <span
-                      className={`text-xs px-3 py-1 rounded-full font-medium ${
-                        order.status === "in-progress"
-                          ? "bg-primary/20 text-primary"
-                          : order.status === "qc"
-                          ? "bg-warning/20 text-warning"
-                          : order.status === "completed"
-                          ? "bg-success/20 text-success"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {order.status}
-                    </span>
-                  </div>
-                  <p className="text-muted-foreground">{order.product}</p>
-                </div>
-
-                <div className="flex items-center gap-6 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Calendar className="w-4 h-4" />
-                    <span>ETA: {order.eta}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Progress:</span>
-                    <span className="font-semibold">{order.progress}%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Progress Bar */}
-              <Progress value={order.progress} className="h-2 mb-6" />
-
-              {/* Stages Timeline */}
-              <div className="flex items-center justify-between">
-                {order.stages.map((stage, stageIndex) => (
-                  <div
-                    key={stage.name}
-                    className="flex flex-col items-center text-center flex-1"
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
-                        stage.completed
-                          ? "bg-success text-success-foreground"
-                          : stage.current
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {stage.completed ? (
-                        <CheckCircle className="w-4 h-4" />
-                      ) : stage.current ? (
-                        <div className="w-2 h-2 rounded-full bg-current animate-pulse" />
-                      ) : (
-                        <span className="text-xs">{stageIndex + 1}</span>
-                      )}
+        {loading ? (
+          <GlassCard className="p-8 text-center">
+            <p className="text-muted-foreground">Loading orders...</p>
+          </GlassCard>
+        ) : orders.length === 0 ? (
+          <GlassCard className="p-8 text-center">
+            <p className="text-muted-foreground">No orders found</p>
+          </GlassCard>
+        ) : (
+          <div className="space-y-6">
+            {orders.map((order, index) => (
+              <GlassCard
+                key={order.id}
+                className={`opacity-0 animate-fade-in-up stagger-${index + 2}`}
+              >
+                {/* Order Header */}
+                <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+                  <div>
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className="text-lg font-semibold">{order.id.slice(0, 8)}</h3>
+                      <span
+                        className={`text-xs px-3 py-1 rounded-full font-medium ${
+                          order.status === "in-progress"
+                            ? "bg-primary/20 text-primary"
+                            : order.status === "completed"
+                            ? "bg-success/20 text-success"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {getStatusDisplay(order.status)}
+                      </span>
                     </div>
-                    <span
-                      className={`text-xs ${
-                        stage.completed || stage.current
-                          ? "text-foreground font-medium"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {stage.name}
-                    </span>
+                    <p className="text-muted-foreground">{order.product}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {order.quantity_completed} / {order.quantity_target} units
+                    </p>
                   </div>
-                ))}
-              </div>
-            </GlassCard>
-          ))}
-        </div>
+
+                  <div className="flex items-center gap-6 text-sm">
+                    {order.deadline && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Calendar className="w-4 h-4" />
+                        <span>ETA: {formatDate(order.deadline)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Progress:</span>
+                      <span className="font-semibold">{order.progress}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <Progress value={order.progress} className="h-2 mb-6" />
+              </GlassCard>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );
