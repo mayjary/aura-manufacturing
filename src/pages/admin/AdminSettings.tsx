@@ -21,6 +21,8 @@ import { toast } from "@/hooks/use-toast";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import AuthErrorDialog from "@/components/AuthErrorDialog";
+import AddProductModal from "@/components/modals/AddProductModal";
+import AddMaterialModal from "@/components/modals/AddMaterialModal";
 
 const sidebarItems = [
   { id: "general", label: "General", icon: Settings },
@@ -34,7 +36,7 @@ const sidebarItems = [
 interface Product {
   id: string;
   name: string;
-  defect_rate: number;
+  expected_defect_percent: number;
 }
 
 interface Material {
@@ -87,6 +89,9 @@ const AdminSettings: React.FC = () => {
     project_code: "",
     client_passcode: "",
   });
+
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [materialModalOpen, setMaterialModalOpen] = useState(false);
 
   /* -------------------- GET PROJECT ID -------------------- */
   
@@ -176,22 +181,19 @@ const AdminSettings: React.FC = () => {
 
   /* -------------------- PRODUCTS -------------------- */
 
-  const addProduct = async () => {
+  const handleSaveProduct = async (payload: { name: string; defect_rate: number }) => {
     if (!projectId) {
       toast({ title: "Project ID not available", variant: "destructive" });
       return;
     }
-
-    const name = prompt("Product name");
-    if (!name) return;
 
     try {
       const product = await apiFetch("/products", {
         method: "POST",
         body: JSON.stringify({ 
           project_id: projectId,
-          name, 
-          defect_rate: 0 
+          name: payload.name, 
+          expected_defect_percent: payload.defect_rate,
         }),
       });
 
@@ -199,6 +201,7 @@ const AdminSettings: React.FC = () => {
       toast({ title: "Product added" });
     } catch (err: any) {
       toast({ title: "Failed to add product", description: err.message, variant: "destructive" });
+      throw err;
     }
   };
 
@@ -220,36 +223,34 @@ const AdminSettings: React.FC = () => {
 
   /* -------------------- MATERIALS -------------------- */
 
-  const addMaterial = async () => {
-    const name = prompt("Material name");
-    if (!name) return;
+  const handleSaveMaterial = async (payload: {
+    name: string;
+    current_stock: number;
+    reorder_threshold: number;
+    supplier?: string;
+  }) => {
+    if (!projectId) {
+      toast({ title: "Project ID not available", variant: "destructive" });
+      return;
+    }
 
     try {
-      // POST endpoint doesn't exist yet - handle gracefully
       const material = await apiFetch("/inventory", {
         method: "POST",
         body: JSON.stringify({
-          name,
-          current_stock: 0,
-          reorder_threshold: 0,
+          project_id: projectId,
+          name: payload.name,
+          current_stock: payload.current_stock,
+          reorder_threshold: payload.reorder_threshold,
+          supplier: payload.supplier,
         }),
-      }).catch(() => {
-        // If POST fails, add to local state for now
-        const newMaterial = {
-          id: `temp-${Date.now()}`,
-          name,
-          current_stock: 0,
-          reorder_threshold: 0,
-        };
-        setMaterials((m) => [...m, newMaterial]);
-        toast({ title: "Material added (local only - backend POST not implemented)" });
-        throw new Error("POST not implemented");
       });
 
       setMaterials((m) => [...m, material]);
       toast({ title: "Material added" });
     } catch (err: any) {
-      // Already handled above
+      toast({ title: "Failed to add material", description: err.message, variant: "destructive" });
+      throw err;
     }
   };
 
@@ -384,6 +385,16 @@ const AdminSettings: React.FC = () => {
       backPath="/admin"
       title="Admin Settings"
     >
+      <AddProductModal
+        open={productModalOpen}
+        onOpenChange={setProductModalOpen}
+        onSave={handleSaveProduct}
+      />
+      <AddMaterialModal
+        open={materialModalOpen}
+        onOpenChange={setMaterialModalOpen}
+        onSave={handleSaveMaterial}
+      />
       {loading && (
         <GlassCard>
           <p className="text-muted-foreground">Loading...</p>
@@ -431,7 +442,7 @@ const AdminSettings: React.FC = () => {
 
       {!loading && projectId && activeSection === "products" && (
         <div className="space-y-4">
-          <Button size="sm" onClick={addProduct} className="gap-2">
+          <Button size="sm" onClick={() => setProductModalOpen(true)} className="gap-2">
             <Plus className="w-4 h-4" /> Add Product
           </Button>
           {products.length === 0 ? (
@@ -444,7 +455,7 @@ const AdminSettings: React.FC = () => {
               <div>
                 <p className="font-medium">{p.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  Defect rate: {p.defect_rate || 0}%
+                  Expected defect: {p.expected_defect_percent || 0}%
                 </p>
               </div>
               <Button
@@ -463,7 +474,7 @@ const AdminSettings: React.FC = () => {
 
       {!loading && activeSection === "materials" && (
         <div className="space-y-4">
-          <Button size="sm" onClick={addMaterial} className="gap-2">
+          <Button size="sm" onClick={() => setMaterialModalOpen(true)} className="gap-2">
             <Plus className="w-4 h-4" /> Add Material
           </Button>
           {materials.length === 0 ? (
