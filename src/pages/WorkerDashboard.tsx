@@ -39,6 +39,8 @@ interface Task {
   status: "pending" | "in-progress" | "completed";
   progress: number;
   machine?: string;
+  quantity_completed: number;
+  quantity_target: number;
 }
 
 const WorkerDashboard: React.FC = () => {
@@ -48,6 +50,7 @@ const WorkerDashboard: React.FC = () => {
   const [authError, setAuthError] = useState<string>("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Check authentication on mount
   useEffect(() => {
@@ -63,53 +66,56 @@ const WorkerDashboard: React.FC = () => {
     }
   }, [isAuthenticated, userRole]);
 
-  useEffect(() => {
+  // Fetch tasks from backend - DB is source of truth
+  const fetchTasks = async () => {
     if (!isAuthenticated || userRole !== "worker") return;
 
-    const fetchTasks = async () => {
-      setLoading(true);
-      try {
-        const orders = await apiFetch("/production/my").catch(() => []);
-        const mapped: Task[] = (orders || []).map((order: any) => {
-          const progress =
-            order.quantity_target && order.quantity_target > 0
-              ? Math.min(
-                  100,
-                  Math.round(
-                    ((order.quantity_completed || 0) / order.quantity_target) * 100
-                  )
-                )
-              : 0;
-          const status: Task["status"] =
-            order.status === "completed"
-              ? "completed"
-              : order.status === "in-progress"
-              ? "in-progress"
-              : "pending";
+    setLoading(true);
+    try {
+      const orders = await apiFetch("/production/my").catch(() => []);
+      const mapped: Task[] = (orders || []).map((order: any) => {
+        const quantityCompleted = order.quantity_completed || 0;
+        const quantityTarget = order.quantity_target || 0;
 
-          return {
-            id: order.id,
-            title: order.product_name || "Production Order",
-            order: order.id,
-            priority: "medium",
-            status,
-            progress,
-            machine: order.machine || undefined,
-          };
-        });
-        setTasks(mapped);
-      } catch (err) {
-        if (err instanceof AuthError) {
-          setAuthError(err.message);
-          setShowAuthError(true);
-        } else {
-          toast({ title: "Failed to load tasks", variant: "destructive" });
-        }
-      } finally {
-        setLoading(false);
+        // Progress formula: (quantity_completed / quantity_target) * 100
+        const progress =
+          quantityTarget > 0
+            ? Math.min(100, Math.round((quantityCompleted / quantityTarget) * 100))
+            : 0;
+
+        const status: Task["status"] =
+          order.status === "completed"
+            ? "completed"
+            : order.status === "in-progress"
+            ? "in-progress"
+            : "pending";
+
+        return {
+          id: order.id,
+          title: order.product_name || "Production Order",
+          order: order.id,
+          priority: "medium",
+          status,
+          progress,
+          machine: order.machine || undefined,
+          quantity_completed: quantityCompleted,
+          quantity_target: quantityTarget,
+        };
+      });
+      setTasks(mapped);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        setAuthError(err.message);
+        setShowAuthError(true);
+      } else {
+        toast({ title: "Failed to load tasks", variant: "destructive" });
       }
-    };
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchTasks();
   }, [isAuthenticated, userRole]);
 
@@ -137,36 +143,73 @@ const WorkerDashboard: React.FC = () => {
     );
   }
 
-  const updateTaskStatus = (taskId: string, newStatus: Task["status"]) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              status: newStatus,
-              progress:
-                newStatus === "completed"
-                  ? 100
-                  : newStatus === "in-progress"
-                  ? Math.max(task.progress, 10)
-                  : task.progress,
-            }
-          : task
-      )
-    );
+  // Handle start production - calls backend, then re-fetches
+  const handleStart = async (orderId: string) => {
+    setActionLoading(orderId);
+    try {
+      await apiFetch("/production/start", {
+        method: "POST",
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      toast({ title: "Production started", variant: "default" });
+      // Re-fetch from backend - DB is source of truth
+      await fetchTasks();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        setAuthError(err.message);
+        setShowAuthError(true);
+      } else {
+        toast({ title: "Failed to start production", variant: "destructive" });
+      }
+    } finally {
+      setActionLoading(null);
+    }
   };
 
-  const updateProgress = (taskId: string, increment: number) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              progress: Math.min(100, Math.max(0, task.progress + increment)),
-            }
-          : task
-      )
-    );
+  // Handle progress update - calls backend with increment, then re-fetches
+  const handleProgress = async (orderId: string, increment: number) => {
+    setActionLoading(orderId);
+    try {
+      await apiFetch("/production/progress", {
+        method: "POST",
+        body: JSON.stringify({ order_id: orderId, increment }),
+      });
+      toast({ title: `Progress updated (+${increment})`, variant: "default" });
+      // Re-fetch from backend - DB is source of truth
+      await fetchTasks();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        setAuthError(err.message);
+        setShowAuthError(true);
+      } else {
+        toast({ title: "Failed to update progress", variant: "destructive" });
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle complete production - calls backend, then re-fetches
+  const handleComplete = async (orderId: string) => {
+    setActionLoading(orderId);
+    try {
+      await apiFetch("/production/complete", {
+        method: "POST",
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      toast({ title: "Production completed", variant: "default" });
+      // Re-fetch from backend - DB is source of truth
+      await fetchTasks();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        setAuthError(err.message);
+        setShowAuthError(true);
+      } else {
+        toast({ title: "Failed to complete production", variant: "destructive" });
+      }
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const completedCount = tasks.filter((t) => t.status === "completed").length;
@@ -318,6 +361,7 @@ const WorkerDashboard: React.FC = () => {
                     <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
                       <span>Order: {task.order}</span>
                       {task.machine && <span>• {task.machine}</span>}
+                      <span>• {task.quantity_completed} / {task.quantity_target}</span>
                     </div>
                   </div>
 
@@ -351,11 +395,12 @@ const WorkerDashboard: React.FC = () => {
                 <div className="flex flex-wrap gap-2 md:gap-3">
                   {task.status === "pending" && (
                     <Button
-                      onClick={() => updateTaskStatus(task.id, "in-progress")}
+                      onClick={() => handleStart(task.id)}
+                      disabled={actionLoading === task.id}
                       className="flex-1 h-12 gap-2 text-sm"
                     >
                       <Play className="w-4 h-4" />
-                      Start Task
+                      {actionLoading === task.id ? "Starting..." : "Start Task"}
                     </Button>
                   )}
 
@@ -363,24 +408,27 @@ const WorkerDashboard: React.FC = () => {
                     <>
                       <Button
                         variant="outline"
-                        onClick={() => updateProgress(task.id, 10)}
+                        onClick={() => handleProgress(task.id, 10)}
+                        disabled={actionLoading === task.id}
                         className="flex-1 h-12 text-sm"
                       >
-                        +10%
+                        +10
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => updateProgress(task.id, 25)}
+                        onClick={() => handleProgress(task.id, 25)}
+                        disabled={actionLoading === task.id}
                         className="flex-1 h-12 text-sm"
                       >
-                        +25%
+                        +25
                       </Button>
                       <Button
-                        onClick={() => updateTaskStatus(task.id, "completed")}
+                        onClick={() => handleComplete(task.id)}
+                        disabled={actionLoading === task.id}
                         className="w-full md:flex-1 h-12 gap-2 text-sm bg-success hover:bg-success/90"
                       >
                         <Check className="w-4 h-4" />
-                        Complete
+                        {actionLoading === task.id ? "Completing..." : "Complete"}
                       </Button>
                     </>
                   )}

@@ -79,37 +79,36 @@ const AdminDashboard: React.FC = () => {
           }))
         );
 
-        // Calculate Production Rate: SUM(quantity_completed) / SUM(quantity_target) × 100
-        const totalCompleted = (orders || []).reduce((sum: number, order: any) => {
-          return sum + (order.quantity_completed || 0);
-        }, 0);
-        const totalTarget = (orders || []).reduce((sum: number, order: any) => {
-          return sum + (order.quantity_target || 0);
-        }, 0);
+        // Active Orders = status != "completed"
+        const activeOrders = (orders || []).filter(
+          (order: any) => order.status !== "completed"
+        ).length;
+
+        // Production Rate = completed_orders / total_orders
+        const totalOrders = orders?.length || 0;
+        const completedOrders = (orders || []).filter(
+          (order: any) => order.status === "completed"
+        ).length;
         const productionRate =
-          totalTarget > 0
-            ? Math.round((totalCompleted / totalTarget) * 100 * 100) / 100
+          totalOrders > 0
+            ? Math.round((completedOrders / totalOrders) * 100 * 100) / 100
             : 0;
 
-        // Fetch QC logs for quality score calculation
+        // Quality Score = AVG(qc_logs.product_quality_score)
         const qcLogs = await apiFetch("/quality/logs").catch(() => []);
-        // Calculate Quality Score: 100 - average(actual_defect_percent)
-        let qualityScore = 100;
+        let qualityScore = 0;
         if (qcLogs && qcLogs.length > 0) {
           const validLogs = qcLogs.filter(
             (log: any) =>
-              log.actual_defect_percent !== null &&
-              log.actual_defect_percent !== undefined
+              log.product_quality_score !== null &&
+              log.product_quality_score !== undefined
           );
           if (validLogs.length > 0) {
-            const avgDefectPercent =
+            const avgScore =
               validLogs.reduce((sum: number, log: any) => {
-                return sum + (parseFloat(log.actual_defect_percent) || 0);
+                return sum + Number(log.product_quality_score || 0);
               }, 0) / validLogs.length;
-            qualityScore = Math.max(
-              0,
-              Math.round((100 - avgDefectPercent) * 100) / 100
-            );
+            qualityScore = Math.round(avgScore * 100) / 100;
           }
         }
 
@@ -134,9 +133,9 @@ const AdminDashboard: React.FC = () => {
         const suggestions = await apiFetch("/ai/suggestions").catch(() => []);
         setAiSuggestions(Array.isArray(suggestions) ? suggestions : []);
 
-        // Calculate stats with real values
+        // Calculate stats with real values from DB
         setStats({
-          activeOrders: orders?.length || 0,
+          activeOrders,
           productionRate,
           qualityScore,
           inventoryAlerts: alerts.length,
@@ -162,10 +161,13 @@ const AdminDashboard: React.FC = () => {
   };
 
   const getProgressFromStatus = (order: any): number => {
-    // Simple progress calculation based on status
-    if (order.status === "completed") return 100;
-    if (order.status === "in-progress") return 50;
-    if (order.status === "pending") return 10;
+    // Use real progress from database: (quantity_completed / quantity_target) * 100
+    if (order.quantity_target && order.quantity_target > 0) {
+      return Math.min(
+        100,
+        Math.round(((order.quantity_completed || 0) / order.quantity_target) * 100)
+      );
+    }
     return 0;
   };
 

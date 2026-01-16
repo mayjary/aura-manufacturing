@@ -38,6 +38,7 @@ const sidebarItems = [
   { id: "quality", label: "Quality Rules", icon: ShieldCheck },
   { id: "ai", label: "AI & Optimization", icon: Sparkles },
   { id: "access", label: "Access Codes", icon: Key },
+  { id: "tasks", label: "Production Tasks", icon: ClipboardList },
 ];
 
 interface Product {
@@ -62,6 +63,32 @@ interface Material {
     quality_grade?: "A" | "B" | "C";
     lead_time_days?: number;
     status?: string;
+}
+
+interface Worker {
+  id: string;
+  username: string;
+}
+
+interface ProductionOrder {
+  id: string;
+  status: string;
+  quantity_target: number;
+  quantity_completed: number;
+  product_name?: string;
+}
+
+interface ProductionTask {
+  id: string;
+  production_order_id: string;
+  worker_id: string;
+  worker_name: string;
+  task_name: string;
+  machine?: string;
+  quantity_target: number;
+  quantity_completed: number;
+  status: "pending" | "in-progress" | "completed";
+  created_at: string;
 }
 
 
@@ -117,6 +144,19 @@ const AdminSettings: React.FC = () => {
     project_code: "",
     client_passcode: "",
   });
+
+  // Production Tasks state
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([]);
+  const [selectedOrderId, setSelectedOrderId] = useState<string>("");
+  const [tasks, setTasks] = useState<ProductionTask[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+
+  // Task creation form state
+  const [newTaskName, setNewTaskName] = useState("");
+  const [newTaskWorkerId, setNewTaskWorkerId] = useState("");
+  const [newTaskMachine, setNewTaskMachine] = useState("");
+  const [newTaskQuantityTarget, setNewTaskQuantityTarget] = useState<number>(0);
 
     /* -------------------- GET PROJECT ID -------------------- */
 
@@ -203,6 +243,149 @@ const AdminSettings: React.FC = () => {
 
         fetchData();
     }, [projectId, isAuthenticated, userRole]);
+
+  /* -------------------- PRODUCTION TASKS -------------------- */
+
+  // Fetch workers and production orders when tasks section is active
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "admin" || activeSection !== "tasks") return;
+
+    const fetchTasksMeta = async () => {
+      try {
+        const [workersData, ordersData] = await Promise.all([
+          apiFetch("/api/admin/tasks/workers").catch(() => []),
+          apiFetch("/api/admin/tasks/production-orders").catch(() => []),
+        ]);
+
+        setWorkers(workersData || []);
+        setProductionOrders(ordersData || []);
+
+        // Auto-select first order if available
+        if (ordersData && ordersData.length > 0 && !selectedOrderId) {
+          setSelectedOrderId(ordersData[0].id);
+        }
+      } catch (err) {
+        if (err instanceof AuthError) {
+          setAuthError(err.message);
+          setShowAuthError(true);
+        } else {
+          console.error("Failed to load tasks metadata", err);
+        }
+      }
+    };
+
+    fetchTasksMeta();
+  }, [activeSection, isAuthenticated, userRole]);
+
+  // Fetch tasks for selected production order
+  useEffect(() => {
+    if (!selectedOrderId || activeSection !== "tasks") return;
+
+    const fetchTasks = async () => {
+      setTasksLoading(true);
+      try {
+        const data = await apiFetch(
+          `/api/admin/tasks?production_order_id=${selectedOrderId}`
+        ).catch(() => []);
+        setTasks(data || []);
+      } catch (err) {
+        if (err instanceof AuthError) {
+          setAuthError(err.message);
+          setShowAuthError(true);
+        } else {
+          toast({ title: "Failed to load tasks", variant: "destructive" });
+        }
+      } finally {
+        setTasksLoading(false);
+      }
+    };
+
+    fetchTasks();
+  }, [selectedOrderId, activeSection]);
+
+  const handleCreateTask = async () => {
+    if (!selectedOrderId || !newTaskWorkerId || !newTaskName || !newTaskQuantityTarget) {
+      toast({ title: "Please fill all required fields", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await apiFetch("/api/admin/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          production_order_id: selectedOrderId,
+          task_name: newTaskName,
+          worker_id: newTaskWorkerId,
+          machine: newTaskMachine || null,
+          quantity_target: newTaskQuantityTarget,
+        }),
+      });
+
+      toast({ title: "Task created successfully" });
+      setNewTaskName("");
+      setNewTaskWorkerId("");
+      setNewTaskMachine("");
+      setNewTaskQuantityTarget(0);
+
+      // Refresh tasks list
+      const data = await apiFetch(
+        `/api/admin/tasks?production_order_id=${selectedOrderId}`
+      ).catch(() => []);
+      setTasks(data || []);
+    } catch (err: any) {
+      toast({
+        title: "Failed to create task",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleReassignWorker = async (taskId: string, workerId: string) => {
+    try {
+      await apiFetch(`/api/admin/tasks/${taskId}/reassign`, {
+        method: "PUT",
+        body: JSON.stringify({ worker_id: workerId }),
+      });
+
+      toast({ title: "Worker reassigned successfully" });
+
+      // Refresh tasks list
+      const data = await apiFetch(
+        `/api/admin/tasks?production_order_id=${selectedOrderId}`
+      ).catch(() => []);
+      setTasks(data || []);
+    } catch (err: any) {
+      toast({
+        title: "Failed to reassign worker",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm("Are you sure you want to delete this task?")) {
+      return;
+    }
+
+    try {
+      await apiFetch(`/api/admin/tasks/${taskId}`, { method: "DELETE" });
+      toast({ title: "Task deleted successfully" });
+
+      // Refresh tasks list
+      const data = await apiFetch(
+        `/api/admin/tasks?production_order_id=${selectedOrderId}`
+      ).catch(() => []);
+      setTasks(data || []);
+    } catch (err: any) {
+      toast({
+        title: "Failed to delete task",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   /* -------------------- PRODUCTS -------------------- */
 
@@ -867,6 +1050,152 @@ const AdminSettings: React.FC = () => {
           </Button>
                         </div>
         </GlassCard>
+      )}
+
+                {!loading && activeSection === "tasks" && (
+        <div className="space-y-6">
+          <GlassCard>
+            <h3 className="text-lg font-semibold mb-4">Production Tasks</h3>
+
+            {/* Select Production Order */}
+            <div className="space-y-2 mb-6">
+              <Label>Select Production Order</Label>
+              <select
+                className="w-full border rounded-md px-3 py-2 bg-background text-sm"
+                value={selectedOrderId}
+                onChange={(e) => setSelectedOrderId(e.target.value)}
+              >
+                {productionOrders.length === 0 && (
+                  <option value="">No production orders available</option>
+                )}
+                {productionOrders.map((order) => (
+                  <option key={order.id} value={order.id}>
+                    {order.product_name || "Order"} - {order.id.slice(0, 8)} ({order.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Create Task Form */}
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-medium text-sm mb-4">Create New Task</h4>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Task Name *</Label>
+                  <Input
+                    className="mt-1"
+                    value={newTaskName}
+                    onChange={(e) => setNewTaskName(e.target.value)}
+                    placeholder="e.g. Assembly, Packaging"
+                  />
+                </div>
+                <div>
+                  <Label>Assign Worker *</Label>
+                  <select
+                    className="mt-1 w-full border rounded-md px-3 py-2 bg-background text-sm"
+                    value={newTaskWorkerId}
+                    onChange={(e) => setNewTaskWorkerId(e.target.value)}
+                  >
+                    <option value="">Select worker</option>
+                    {workers.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.username}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label>Machine (optional)</Label>
+                  <Input
+                    className="mt-1"
+                    value={newTaskMachine}
+                    onChange={(e) => setNewTaskMachine(e.target.value)}
+                    placeholder="e.g. M-101"
+                  />
+                </div>
+                <div>
+                  <Label>Quantity Target *</Label>
+                  <Input
+                    type="number"
+                    className="mt-1"
+                    value={newTaskQuantityTarget || ""}
+                    onChange={(e) => setNewTaskQuantityTarget(Number(e.target.value || 0))}
+                    min={1}
+                    placeholder="Enter quantity"
+                  />
+                </div>
+              </div>
+              <Button className="mt-2" onClick={handleCreateTask}>
+                <Plus className="w-4 h-4 mr-2" />
+                Create Task
+              </Button>
+            </div>
+
+            {/* Tasks List for selected order */}
+            <div className="border-t pt-4 space-y-3">
+              <h4 className="font-medium text-sm">Tasks for this Order</h4>
+              {tasksLoading ? (
+                <p className="text-sm text-muted-foreground">Loading tasks...</p>
+              ) : tasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No tasks created for this production order yet.
+                </p>
+              ) : (
+                tasks.map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex flex-col md:flex-row md:items-center justify-between gap-3 border rounded-lg px-4 py-3 bg-muted/40"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-medium text-sm">{t.task_name}</p>
+                        <Badge
+                          variant={
+                            t.status === "completed"
+                              ? "default"
+                              : t.status === "in-progress"
+                              ? "secondary"
+                              : "outline"
+                          }
+                        >
+                          {t.status}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Worker: {t.worker_name}
+                        {t.machine && <> • Machine: {t.machine}</>}
+                        {" • "}
+                        Progress: {t.quantity_completed} / {t.quantity_target}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {/* Reassign Worker */}
+                      <select
+                        className="border rounded-md px-2 py-1 text-xs bg-background"
+                        value={t.worker_id}
+                        onChange={(e) => handleReassignWorker(t.id, e.target.value)}
+                      >
+                        {workers.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.username}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive h-8 w-8"
+                        onClick={() => handleDeleteTask(t.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </GlassCard>
+        </div>
       )}
     </SettingsLayout>
         </>

@@ -56,31 +56,50 @@ const ClientDashboard: React.FC = () => {
 
     const fetchData = async () => {
       try {
-        const orderData = await apiFetch("/production/my").catch(() => []);
+        // Use client-specific endpoint - returns client-safe fields only
+        const orderData = await apiFetch("/production/client").catch(() => []);
         const mapped = (orderData || []).map((o: any) => {
+          const quantityCompleted = o.quantity_completed || 0;
+          const quantityTarget = o.quantity_target || 0;
+
+          // Progress formula: (quantity_completed / quantity_target) * 100
           const progress =
-            o.quantity_target && o.quantity_target > 0
-              ? Math.min(
-                  100,
-                  Math.round(((o.quantity_completed || 0) / o.quantity_target) * 100)
-                )
+            quantityTarget > 0
+              ? Math.min(100, Math.round((quantityCompleted / quantityTarget) * 100))
               : 0;
+
+          const status = o.status || "pending";
+
+          // Order stages derived ONLY from status - NO fake stages
+          const stages = [
+            {
+              name: "Order Placed",
+              completed: true,
+              current: status === "pending",
+            },
+            {
+              name: "In Production",
+              completed: status === "completed" || status === "in-progress",
+              current: status === "in-progress",
+            },
+            {
+              name: "Completed",
+              completed: status === "completed",
+              current: false,
+            },
+          ];
+
           return {
             id: o.id,
             product: o.product_name || "Production Order",
-            status: o.status || "pending",
+            status,
             progress,
             eta: o.deadline ? new Date(o.deadline).toLocaleDateString() : "TBD",
             completed_at: o.completed_at,
-            stages: [
-              { name: "Order Placed", completed: true },
-              { name: "Materials Ready", completed: true },
-              { name: "In Production", completed: o.status === "in-progress", current: o.status === "in-progress" },
-              { name: "Quality Check", completed: o.status === "completed", current: o.status === "qc" },
-              { name: "Shipped", completed: o.status === "shipped" },
-            ],
+            stages,
           };
         });
+
         setOrders(mapped);
 
         const now = new Date();
@@ -88,7 +107,7 @@ const ClientDashboard: React.FC = () => {
         const thisYear = now.getFullYear();
         setStats({
           activeOrders: mapped.filter((o: any) => o.status !== "completed").length,
-          inTransit: mapped.filter((o: any) => o.status === "shipped").length,
+          inTransit: 0, // No shipping status in schema - keep 0 from DB reality
           completedThisMonth: mapped.filter((o: any) => {
             const completedAt = o.completed_at ? new Date(o.completed_at) : null;
             return (
