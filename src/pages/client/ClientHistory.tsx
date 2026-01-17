@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import AuthErrorDialog from "@/components/AuthErrorDialog";
+import { toast } from "@/hooks/use-toast";
 
 const navItems = [
   { label: "Orders", href: "/client", icon: Package },
@@ -100,6 +101,61 @@ const ClientHistory: React.FC = () => {
     return "text-warning";
   };
 
+  const handleExportHistory = () => {
+    if (completedOrders.length === 0) {
+      toast({
+        title: "No data to export",
+        description: "There are no completed orders to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Create CSV headers
+      const headers = ["Order ID", "Product", "Quantity Delivered", "Completed Date", "QC Score", "Status"];
+      
+      // Create CSV rows
+      const rows = completedOrders.map((order) => [
+        order.id.slice(0, 8),
+        order.product,
+        order.deliveredQty.toString(),
+        order.completedDate,
+        order.qcScore.toString(),
+        "Completed",
+      ]);
+
+      // Combine headers and rows
+      const csvContent = [headers, ...rows]
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+
+      // Create blob and trigger download
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const dateStr = new Date().toISOString().split("T")[0];
+      link.href = blobUrl;
+      link.download = `client-history-${dateStr}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+
+      toast({
+        title: "Export successful",
+        description: "Client history exported as CSV",
+      });
+    } catch (err: any) {
+      console.error("Export error:", err);
+      toast({
+        title: "Export failed",
+        description: err.message || "Failed to export history",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Don't render content if not authenticated
   if (!isAuthenticated || userRole !== "client") {
     return (
@@ -158,7 +214,7 @@ const ClientHistory: React.FC = () => {
             <h1 className="text-3xl font-bold text-foreground">Order History</h1>
             <p className="text-muted-foreground mt-1">View your completed orders</p>
           </div>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={handleExportHistory} disabled={loading || completedOrders.length === 0}>
             <Download className="w-4 h-4" />
             Export History
           </Button>
