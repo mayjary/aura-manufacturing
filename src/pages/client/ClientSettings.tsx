@@ -10,8 +10,6 @@ import {
   Bell,
   User,
   Copy,
-  Eye,
-  EyeOff,
   Package,
   ShieldCheck,
 } from "lucide-react";
@@ -26,13 +24,13 @@ const sidebarItems = [
 
 const ClientSettings: React.FC = () => {
   const [activeSection, setActiveSection] = useState("access");
-  const [showPasscode, setShowPasscode] = useState(false);
-  const [passcode, setPasscode] = useState("");
-  const [projectCode, setProjectCode] = useState("");
-  const [newPasscode, setNewPasscode] = useState("");
-  const [projectId, setProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  
+
+  const [joinProjectCode, setJoinProjectCode] = useState("");
+  const [joiningProject, setJoiningProject] = useState(false);
+  const [hasJoinedProject, setHasJoinedProject] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
+
   const [notifications, setNotifications] = useState({
     deliveryUpdates: true,
     orderStatus: true,
@@ -56,73 +54,90 @@ const ClientSettings: React.FC = () => {
     onTimeDeliveryRate: 0,
   });
 
-  // Fetch access codes and project info
+  /* -------------------------------------------------------
+     Restore persisted project on mount (ADMIN-LIKE LOGIC)
+  ------------------------------------------------------- */
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Get project ID (should come from user context in real app)
-        const storedProjectId = localStorage.getItem("project_id") || "1";
-        setProjectId(storedProjectId);
+    const storedProjectId = localStorage.getItem("client_project_id");
+    const storedCode = localStorage.getItem("client_access_code");
 
-        // Fetch access codes
-        const accessData = await apiFetch(`/access-codes?project_id=${storedProjectId}`).catch(() => null);
-        if (accessData) {
-          setProjectCode(accessData.project_code || "");
-          setPasscode(accessData.client_passcode || "");
-        }
+    if (storedProjectId) {
+      setProjectId(storedProjectId);
+      setHasJoinedProject(true);
+    }
 
-        // TODO: Fetch account info, notifications, and stats when backend routes are created
-        // For now, use defaults
-      } catch (err) {
-        console.error("Failed to fetch settings", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+    if (storedCode) {
+      setJoinProjectCode(storedCode);
+    }
+
+    setLoading(false);
   }, []);
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copied to clipboard" });
-  };
-
-  const handleChangePasscode = async () => {
-    if (newPasscode.length < 6) {
-      toast({ title: "Passcode must be at least 6 characters", variant: "destructive" });
+  /* -------------------------------------------------------
+     Join project using access code
+  ------------------------------------------------------- */
+  const handleJoinProject = async () => {
+    if (!joinProjectCode) {
+      toast({
+        title: "Missing access code",
+        variant: "destructive",
+      });
       return;
     }
 
     try {
-      // TODO: Implement backend route for changing passcode
-      // For now, just update locally
-      setPasscode(newPasscode);
-      setNewPasscode("");
-      toast({ title: "Passcode updated (backend route not implemented yet)" });
+      setJoiningProject(true);
+
+      const result = await apiFetch("/access-codes/join", {
+        method: "POST",
+        body: JSON.stringify({
+          project_code: joinProjectCode.toUpperCase(),
+        }),
+      });
+
+      // Backend returns project_id
+      const joinedProjectId = result.project_id;
+      const upperCode = joinProjectCode.toUpperCase();
+
+      // Persist exactly like admin
+      localStorage.setItem("client_project_id", joinedProjectId);
+      localStorage.setItem("client_access_code", upperCode);
+
+      setProjectId(joinedProjectId);
+      setJoinProjectCode(upperCode);
+      setHasJoinedProject(true);
+
+      toast({
+        title: "Project joined successfully",
+        description: "You now have access to this project",
+      });
     } catch (err: any) {
-      toast({ title: "Failed to update passcode", description: err.message, variant: "destructive" });
+      toast({
+        title: "Failed to join project",
+        description: err.message || "Invalid access code",
+        variant: "destructive",
+      });
+    } finally {
+      setJoiningProject(false);
     }
   };
 
-  const handleSaveNotifications = async () => {
-    try {
-      // TODO: Implement backend route for saving notifications
-      toast({ title: "Notification preferences saved (backend route not implemented yet)" });
-    } catch (err: any) {
-      toast({ title: "Failed to save preferences", description: err.message, variant: "destructive" });
-    }
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied" });
   };
 
-  const handleUpdateAccount = async () => {
-    try {
-      // TODO: Implement backend route for updating account
-      toast({ title: "Account updated (backend route not implemented yet)" });
-    } catch (err: any) {
-      toast({ title: "Failed to update account", description: err.message, variant: "destructive" });
-    }
+  const clearProject = () => {
+    localStorage.removeItem("client_project_id");
+    localStorage.removeItem("client_access_code");
+    setProjectId(null);
+    setJoinProjectCode("");
+    setHasJoinedProject(false);
   };
 
+  /* -------------------------------------------------------
+     UI
+  ------------------------------------------------------- */
   const renderContent = () => {
     switch (activeSection) {
       case "access":
@@ -130,222 +145,112 @@ const ClientSettings: React.FC = () => {
           <div className="space-y-4 animate-fade-in-up">
             <GlassCard>
               <h3 className="text-lg font-semibold mb-6">Project Access</h3>
-              <div className="space-y-6">
+
+              <div className="space-y-4">
                 <div>
-                  <Label>Project Code</Label>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Input
-                      value={projectCode || "Loading..."}
-                      readOnly
-                      className="font-mono bg-secondary/30"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => copyToClipboard(projectCode)}
-                      disabled={!projectCode}
-                    >
-                      <Copy className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    This code identifies your project with the manufacturer.
+                  <Label>Access Code</Label>
+                  <Input
+                    className="mt-2 font-mono text-lg"
+                    placeholder="Enter access code"
+                    value={joinProjectCode}
+                    onChange={(e) =>
+                      !hasJoinedProject &&
+                      setJoinProjectCode(e.target.value.toUpperCase())
+                    }
+                    readOnly={hasJoinedProject}
+                    maxLength={8}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {hasJoinedProject
+                      ? "You are connected to a project"
+                      : "Enter the code provided by admin"}
                   </p>
                 </div>
-                
-                <div>
-                  <Label>Current Passcode</Label>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Input
-                      type={showPasscode ? "text" : "password"}
-                      value={passcode}
-                      readOnly
-                      className="font-mono bg-secondary/30"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setShowPasscode(!showPasscode)}
-                    >
-                      {showPasscode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => copyToClipboard(passcode)}
-                    >
-                      <Copy className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
 
-                <div className="pt-4 border-t border-border/30">
-                  <Label>Change Passcode</Label>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Input
-                      type="password"
-                      value={newPasscode}
-                      onChange={(e) => setNewPasscode(e.target.value)}
-                      placeholder="Enter new passcode"
-                    />
-                    <Button onClick={handleChangePasscode}>
-                      Update
+                {hasJoinedProject ? (
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => copyToClipboard(joinProjectCode)}>
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Code
+                    </Button>
+                    <Button variant="destructive" onClick={clearProject}>
+                      Leave Project
                     </Button>
                   </div>
-                </div>
+                ) : (
+                  <Button
+                    className="w-full"
+                    onClick={handleJoinProject}
+                    disabled={joiningProject}
+                  >
+                    {joiningProject ? "Joining..." : "Join Project"}
+                  </Button>
+                )}
               </div>
             </GlassCard>
 
             <GlassCard>
               <div className="flex items-center gap-3 mb-4">
                 <Package className="w-5 h-5 text-primary" />
-                <h4 className="font-semibold">Product Summary</h4>
+                <h4 className="font-semibold">Order Access</h4>
               </div>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between py-2 border-b border-border/30">
-                  <span className="text-muted-foreground">Active Orders</span>
-                  <span className="font-medium">{stats.activeOrders || 0}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-border/30">
-                  <span className="text-muted-foreground">Products in Production</span>
-                  <span className="font-medium">{stats.productsInProduction || 0} units</span>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span className="text-muted-foreground">Completed This Month</span>
-                  <span className="font-medium">{stats.completedThisMonth || 0} orders</span>
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Once connected, all project orders and history will be visible
+                in your dashboard.
+              </p>
             </GlassCard>
 
             <GlassCard>
               <div className="flex items-center gap-3 mb-4">
                 <ShieldCheck className="w-5 h-5 text-success" />
-                <h4 className="font-semibold">Quality Summary</h4>
+                <h4 className="font-semibold">Quality Transparency</h4>
               </div>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between py-2 border-b border-border/30">
-                  <span className="text-muted-foreground">Average QC Score</span>
-                  <span className="font-medium text-success">
-                    {stats.averageQCScore > 0 ? `${stats.averageQCScore} / 100` : "N/A"}
-                  </span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-border/30">
-                  <span className="text-muted-foreground">Defect Rate</span>
-                  <span className="font-medium">
-                    {stats.defectRate > 0 ? `${stats.defectRate}%` : "N/A"}
-                  </span>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span className="text-muted-foreground">On-Time Delivery Rate</span>
-                  <span className="font-medium text-success">
-                    {stats.onTimeDeliveryRate > 0 ? `${stats.onTimeDeliveryRate}%` : "N/A"}
-                  </span>
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground">
+                You will receive QC reports and delivery updates automatically.
+              </p>
             </GlassCard>
           </div>
         );
 
       case "notifications":
         return (
-          <GlassCard className="animate-fade-in-up">
+          <GlassCard>
             <h3 className="text-lg font-semibold mb-6">Notification Preferences</h3>
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Delivery Updates</p>
-                  <p className="text-sm text-muted-foreground">Get notified when your order ships</p>
+              {Object.entries(notifications).map(([key, value]) => (
+                <div key={key} className="flex justify-between items-center">
+                  <span className="text-sm capitalize">
+                    {key.replace(/([A-Z])/g, " $1")}
+                  </span>
+                  <Switch
+                    checked={value}
+                    onCheckedChange={(checked) =>
+                      setNotifications((n) => ({ ...n, [key]: checked }))
+                    }
+                  />
                 </div>
-                <Switch
-                  checked={notifications.deliveryUpdates}
-                  onCheckedChange={(checked) => 
-                    setNotifications(prev => ({ ...prev, deliveryUpdates: checked }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Order Status Changes</p>
-                  <p className="text-sm text-muted-foreground">Updates when order moves to next stage</p>
-                </div>
-                <Switch
-                  checked={notifications.orderStatus}
-                  onCheckedChange={(checked) => 
-                    setNotifications(prev => ({ ...prev, orderStatus: checked }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Quality Reports</p>
-                  <p className="text-sm text-muted-foreground">Receive QC reports after completion</p>
-                </div>
-                <Switch
-                  checked={notifications.qualityReports}
-                  onCheckedChange={(checked) => 
-                    setNotifications(prev => ({ ...prev, qualityReports: checked }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Weekly Email Digest</p>
-                  <p className="text-sm text-muted-foreground">Summary of all order activities</p>
-                </div>
-                <Switch
-                  checked={notifications.emailDigest}
-                  onCheckedChange={(checked) => 
-                    setNotifications(prev => ({ ...prev, emailDigest: checked }))
-                  }
-                />
-              </div>
-              <Button className="mt-4" onClick={handleSaveNotifications}>Save Preferences</Button>
+              ))}
             </div>
           </GlassCard>
         );
 
       case "account":
         return (
-          <GlassCard className="animate-fade-in-up">
+          <GlassCard>
             <h3 className="text-lg font-semibold mb-6">Account Information</h3>
             <div className="space-y-4">
-              <div>
-                <Label>Company Name</Label>
-                <Input 
-                  value={accountInfo.companyName}
-                  onChange={(e) => setAccountInfo({ ...accountInfo, companyName: e.target.value })}
-                  placeholder="Acme Industries"
-                  className="mt-2" 
-                />
-              </div>
-              <div>
-                <Label>Contact Email</Label>
-                <Input 
-                  value={accountInfo.contactEmail}
-                  onChange={(e) => setAccountInfo({ ...accountInfo, contactEmail: e.target.value })}
-                  placeholder="orders@acme.com"
-                  className="mt-2" 
-                />
-              </div>
-              <div>
-                <Label>Phone Number</Label>
-                <Input 
-                  value={accountInfo.phoneNumber}
-                  onChange={(e) => setAccountInfo({ ...accountInfo, phoneNumber: e.target.value })}
-                  placeholder="+1 (555) 123-4567"
-                  className="mt-2" 
-                />
-              </div>
-              <div>
-                <Label>Billing Address</Label>
-                <Input 
-                  value={accountInfo.billingAddress}
-                  onChange={(e) => setAccountInfo({ ...accountInfo, billingAddress: e.target.value })}
-                  placeholder="123 Business Ave, Suite 100"
-                  className="mt-2" 
-                />
-              </div>
-              <Button className="mt-4" onClick={handleUpdateAccount}>Update Account</Button>
+              {Object.entries(accountInfo).map(([key, value]) => (
+                <div key={key}>
+                  <Label>{key.replace(/([A-Z])/g, " $1")}</Label>
+                  <Input
+                    className="mt-2"
+                    value={value}
+                    onChange={(e) =>
+                      setAccountInfo((a) => ({ ...a, [key]: e.target.value }))
+                    }
+                  />
+                </div>
+              ))}
             </div>
           </GlassCard>
         );
@@ -354,6 +259,10 @@ const ClientSettings: React.FC = () => {
         return null;
     }
   };
+
+  if (loading) {
+    return <GlassCard className="p-6">Loading...</GlassCard>;
+  }
 
   return (
     <SettingsLayout

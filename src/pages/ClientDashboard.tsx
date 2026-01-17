@@ -64,7 +64,7 @@ const ClientDashboard: React.FC = () => {
 
     const fetchOrders = async () => {
       try {
-        const orderData = await apiFetch("/production/my").catch(() => []);
+        const orderData = await apiFetch("/client/orders").catch(() => []);
         const mapped = (orderData || []).map((o: any) => {
           const progress =
             o.quantity_target && o.quantity_target > 0
@@ -212,8 +212,18 @@ const ClientDashboard: React.FC = () => {
             <p className="text-muted-foreground">Loading orders...</p>
           </GlassCard>
         ) : orders.length === 0 ? (
-          <GlassCard className="p-8 text-center">
+          <GlassCard className="p-8 text-center space-y-4">
             <p className="text-muted-foreground">No orders found</p>
+            <p className="text-sm text-muted-foreground">
+              Join a project using an access code to view orders and track production.
+            </p>
+            <Button 
+              variant="outline" 
+              onClick={() => navigate("/client/settings")}
+              className="mt-4"
+            >
+              Go to Settings to Join Project
+            </Button>
           </GlassCard>
         ) : (
           <div className="space-y-6">

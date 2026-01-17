@@ -79,10 +79,7 @@ const AdminSettings: React.FC = () => {
     material_buffer: 0,
   });
 
-  const [accessCodes, setAccessCodes] = useState({
-    project_code: "",
-    client_passcode: "",
-  });
+  const [accessCode, setAccessCode] = useState("");
 
   // Tasks section state
   const [tasks, setTasks] = useState<any[]>([]);
@@ -148,13 +145,10 @@ const AdminSettings: React.FC = () => {
                     // AI settings endpoint might not be fully implemented
                 }
 
-                // Fetch access codes
+                // Fetch access code
                 const accessData = await apiFetch(`/access-codes?project_id=${projectId}`).catch(() => null);
                 if (accessData) {
-                    setAccessCodes({
-                        project_code: accessData.project_code || "",
-                        client_passcode: accessData.client_passcode || "",
-                    });
+                    setAccessCode(accessData.project_code || "");
                 }
 
                 // Fetch tasks data
@@ -727,26 +721,35 @@ const AdminSettings: React.FC = () => {
         {!loading && activeSection === "access" && (
           <GlassCard className="space-y-6">
             <div>
-              <Label>Project Code</Label>
+              <Label>Access Code</Label>
+              <p className="text-sm text-muted-foreground mb-3">
+                Share this code with clients to allow them to join this project.
+              </p>
               <div className="flex gap-2 mt-2">
-                <Input value={accessCodes.project_code} readOnly />
-                <Button variant="outline" onClick={() => copyText(accessCodes.project_code)}>
+                <Input value={accessCode} readOnly className="font-mono text-lg" />
+                <Button variant="outline" onClick={() => copyText(accessCode)}>
                   <Copy className="w-4 h-4" />
                 </Button>
-                <Button variant="outline">
-                  <RefreshCw className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <Label>Client Passcode</Label>
-              <div className="flex gap-2 mt-2">
-                <Input value={accessCodes.client_passcode} readOnly />
-                <Button variant="outline" onClick={() => copyText(accessCodes.client_passcode)}>
-                  <Copy className="w-4 h-4" />
-                </Button>
-                <Button variant="outline">
+                <Button 
+                  variant="outline" 
+                  onClick={async () => {
+                    if (!projectId) return;
+                    try {
+                      const newCode = await apiFetch("/access-codes/regenerate", {
+                        method: "POST",
+                        body: JSON.stringify({ project_id: projectId }),
+                      });
+                      setAccessCode(newCode.project_code || "");
+                      toast({ title: "Access code regenerated" });
+                    } catch (err: any) {
+                      toast({ 
+                        title: "Failed to regenerate code", 
+                        description: err.message,
+                        variant: "destructive" 
+                      });
+                    }
+                  }}
+                >
                   <RefreshCw className="w-4 h-4" />
                 </Button>
               </div>
