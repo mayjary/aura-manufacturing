@@ -40,6 +40,7 @@ import { useAuth } from "@/hooks/use-auth";
 import AuthErrorDialog from "@/components/AuthErrorDialog";
 import WorkerQualityTable from "@/components/WorkerQualityTable";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
+import { OperationsChatbot } from "@/components/chatbot/OperationsChatbot";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -81,6 +82,14 @@ const AdminQuality: React.FC = () => {
   const [workerPerformanceData, setWorkerPerformanceData] = useState<any[]>([]);
   const [productionOutputData, setProductionOutputData] = useState<any[]>([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [project_id, setProjectId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "admin") return;
+    const stored = localStorage.getItem("project_id");
+    if (stored) {
+      setProjectId(stored);
+    }
+  }, [isAuthenticated, userRole]);
 
   // Check authentication on mount
   useEffect(() => {
@@ -526,6 +535,8 @@ const AdminQuality: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+      <OperationsChatbot projectId={project_id} />
+
     </div>
   );
 };

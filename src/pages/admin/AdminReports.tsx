@@ -23,6 +23,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
+import { OperationsChatbot } from "@/components/chatbot/OperationsChatbot";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -85,6 +86,14 @@ const AdminReports: React.FC = () => {
     avgQcScore: 0,
   });
   const [reportCards, setReportCards] = useState<ReportCardData[]>([]);
+  const [project_id, setProjectId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== "admin") return;
+    const stored = localStorage.getItem("project_id");
+    if (stored) {
+      setProjectId(stored);
+    }
+  }, [isAuthenticated, userRole]);
 
   // Fetch report data from backend
   useEffect(() => {
@@ -485,6 +494,7 @@ const AdminReports: React.FC = () => {
             </div>
           </div>
         </GlassCard>
+        <OperationsChatbot projectId={project_id} />
       </main>
     </div>
   );
