@@ -1,4 +1,4 @@
-const API_BASE = "https://manufacturehub-backend-1.onrender.com";
+const API_BASE = "http://localhost:5001";
 
 // Custom error class for authentication errors
 export class AuthError extends Error {
